@@ -3,17 +3,16 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
 
+import KeyboardForm from '@/components/KeyboardForm';
 import { Text, View, useThemeColor } from '@/components/Themed';
+import { formStyles } from '@/constants/Form';
 import {
   getBusinessSettings,
   saveBusinessSettings,
@@ -147,198 +146,184 @@ export default function SettingsScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>Business info</Text>
-        <Text style={styles.subheading}>
-          Shown on every quote PDF. Default tax rate applies to new quotes.
-        </Text>
+    <KeyboardForm style={{ backgroundColor: background }}>
+      <Text style={styles.heading}>Business info</Text>
+      <Text style={styles.subheading}>
+        Shown on every quote PDF. Default tax rate applies to new quotes.
+      </Text>
 
-        <FieldLabel>Logo</FieldLabel>
-        <View style={styles.logoRow} lightColor="transparent" darkColor="transparent">
-          {settings.logoUri ? (
-            <Image source={{ uri: settings.logoUri }} style={styles.logo} />
-          ) : (
-            <View
-              style={[
-                styles.logoPlaceholder,
-                { backgroundColor: fieldBg, borderColor },
-              ]}>
-              <Text style={styles.logoPlaceholderText}>No logo</Text>
-            </View>
-          )}
-          <View style={styles.logoActions} lightColor="transparent" darkColor="transparent">
-            <Pressable
-              onPress={() => {
-                void handlePickLogo();
-              }}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                { borderColor, backgroundColor: fieldBg },
-                pressed && styles.pressed,
-              ]}>
-              <Text style={[styles.secondaryButtonText, { color: tint }]}>
-                {settings.logoUri ? 'Change logo' : 'Choose logo'}
-              </Text>
-            </Pressable>
-            {settings.logoUri ? (
-              <Pressable onPress={() => void handleRemoveLogo()} hitSlop={6}>
-                <Text style={styles.removeLogo}>Remove</Text>
-              </Pressable>
-            ) : null}
+      <FieldLabel>Logo</FieldLabel>
+      <View style={styles.logoRow} lightColor="transparent" darkColor="transparent">
+        {settings.logoUri ? (
+          <Image source={{ uri: settings.logoUri }} style={styles.logo} />
+        ) : (
+          <View
+            style={[
+              styles.logoPlaceholder,
+              { backgroundColor: fieldBg, borderColor },
+            ]}>
+            <Text style={styles.logoPlaceholderText}>No logo</Text>
           </View>
+        )}
+        <View style={styles.logoActions} lightColor="transparent" darkColor="transparent">
+          <Pressable
+            onPress={() => {
+              void handlePickLogo();
+            }}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              { borderColor, backgroundColor: fieldBg },
+              pressed && formStyles.pressed,
+            ]}>
+            <Text style={[styles.secondaryButtonText, { color: tint }]}>
+              {settings.logoUri ? 'Change logo' : 'Choose logo'}
+            </Text>
+          </Pressable>
+          {settings.logoUri ? (
+            <Pressable onPress={() => void handleRemoveLogo()} hitSlop={12}>
+              <Text style={styles.removeLogo}>Remove</Text>
+            </Pressable>
+          ) : null}
         </View>
+      </View>
 
-        <FieldLabel>Business name</FieldLabel>
-        <TextInput
-          value={settings.businessName}
-          onChangeText={(businessName) => updateField('businessName', businessName)}
-          placeholder="Company name"
-          placeholderTextColor="#999"
-          style={[
-            styles.input,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>Business name</FieldLabel>
+      <TextInput
+        value={settings.businessName}
+        onChangeText={(businessName) => updateField('businessName', businessName)}
+        placeholder="Company name"
+        placeholderTextColor="#999"
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <FieldLabel>Phone</FieldLabel>
-        <TextInput
-          value={settings.phone}
-          onChangeText={(phone) => updateField('phone', phone)}
-          placeholder="Business phone"
-          placeholderTextColor="#999"
-          keyboardType="phone-pad"
-          style={[
-            styles.input,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>Phone</FieldLabel>
+      <TextInput
+        value={settings.phone}
+        onChangeText={(phone) => updateField('phone', phone)}
+        placeholder="Business phone"
+        placeholderTextColor="#999"
+        keyboardType="phone-pad"
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <FieldLabel>Email</FieldLabel>
-        <TextInput
-          value={settings.email}
-          onChangeText={(email) => updateField('email', email)}
-          placeholder="quotes@company.com"
-          placeholderTextColor="#999"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          style={[
-            styles.input,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>Email</FieldLabel>
+      <TextInput
+        value={settings.email}
+        onChangeText={(email) => updateField('email', email)}
+        placeholder="quotes@company.com"
+        placeholderTextColor="#999"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <FieldLabel>Website</FieldLabel>
-        <TextInput
-          value={settings.website}
-          onChangeText={(website) => updateField('website', website)}
-          placeholder="https://"
-          placeholderTextColor="#999"
-          autoCapitalize="none"
-          keyboardType="url"
-          style={[
-            styles.input,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>Website</FieldLabel>
+      <TextInput
+        value={settings.website}
+        onChangeText={(website) => updateField('website', website)}
+        placeholder="https://"
+        placeholderTextColor="#999"
+        autoCapitalize="none"
+        keyboardType="url"
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <FieldLabel>Address</FieldLabel>
-        <TextInput
-          value={settings.address}
-          onChangeText={(address) => updateField('address', address)}
-          placeholder="Street, city, state, ZIP"
-          placeholderTextColor="#999"
-          multiline
-          textAlignVertical="top"
-          style={[
-            styles.input,
-            styles.multiline,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>Address</FieldLabel>
+      <TextInput
+        value={settings.address}
+        onChangeText={(address) => updateField('address', address)}
+        placeholder="Street, city, state, ZIP"
+        placeholderTextColor="#999"
+        multiline
+        textAlignVertical="top"
+        style={[
+          formStyles.input,
+          formStyles.multiline,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <FieldLabel>License #</FieldLabel>
-        <TextInput
-          value={settings.licenseNumber}
-          onChangeText={(licenseNumber) =>
-            updateField('licenseNumber', licenseNumber)
-          }
-          placeholder="Contractor / business license"
-          placeholderTextColor="#999"
-          style={[
-            styles.input,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>License #</FieldLabel>
+      <TextInput
+        value={settings.licenseNumber}
+        onChangeText={(licenseNumber) =>
+          updateField('licenseNumber', licenseNumber)
+        }
+        placeholder="Contractor / business license"
+        placeholderTextColor="#999"
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <FieldLabel>Default tax rate (%)</FieldLabel>
-        <TextInput
-          value={taxText}
-          onChangeText={setTaxText}
-          placeholder="0"
-          placeholderTextColor="#999"
-          keyboardType="decimal-pad"
-          style={[
-            styles.input,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>Default tax rate (%)</FieldLabel>
+      <TextInput
+        value={taxText}
+        onChangeText={setTaxText}
+        placeholder="0"
+        placeholderTextColor="#999"
+        keyboardType="decimal-pad"
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <FieldLabel>Quote footer (warranty / terms)</FieldLabel>
-        <TextInput
-          value={settings.quoteFooter}
-          onChangeText={(quoteFooter) => updateField('quoteFooter', quoteFooter)}
-          placeholder="Warranty, terms, and thank-you text for PDFs"
-          placeholderTextColor="#999"
-          multiline
-          textAlignVertical="top"
-          style={[
-            styles.input,
-            styles.footerInput,
-            { color: textColor, backgroundColor: fieldBg, borderColor },
-          ]}
-        />
+      <FieldLabel>Quote footer (warranty / terms)</FieldLabel>
+      <TextInput
+        value={settings.quoteFooter}
+        onChangeText={(quoteFooter) => updateField('quoteFooter', quoteFooter)}
+        placeholder="Warranty, terms, and thank-you text for PDFs"
+        placeholderTextColor="#999"
+        multiline
+        textAlignVertical="top"
+        style={[
+          formStyles.input,
+          styles.footerInput,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
 
-        <Pressable
-          onPress={() => {
-            void handleSave();
-          }}
-          disabled={saving}
-          style={({ pressed }) => [
-            styles.saveButton,
-            { backgroundColor: tint },
-            (pressed || saving) && styles.pressed,
-          ]}>
-          <Text style={styles.saveButtonText} lightColor="#fff" darkColor="#000">
-            {saving ? 'Saving…' : 'Save settings'}
-          </Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <Pressable
+        onPress={() => {
+          void handleSave();
+        }}
+        disabled={saving}
+        style={({ pressed }) => [
+          formStyles.primaryButton,
+          { backgroundColor: tint },
+          (pressed || saving) && formStyles.pressed,
+        ]}>
+        <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
+          {saving ? 'Saving…' : 'Save settings'}
+        </Text>
+      </Pressable>
+    </KeyboardForm>
   );
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <Text style={styles.label}>{children}</Text>;
+  return <Text style={formStyles.label}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 6,
   },
   heading: {
     fontSize: 22,
@@ -351,28 +336,10 @@ const styles = StyleSheet.create({
     opacity: 0.65,
     marginBottom: 12,
   },
-  label: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: '600',
-    opacity: 0.6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-    fontSize: 16,
-  },
-  multiline: {
-    minHeight: 80,
-    paddingTop: 12,
-  },
   footerInput: {
     minHeight: 110,
-    paddingTop: 12,
+    paddingTop: 14,
+    textAlignVertical: 'top',
   },
   logoRow: {
     flexDirection: 'row',
@@ -403,8 +370,9 @@ const styles = StyleSheet.create({
   secondaryButton: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   secondaryButtonText: {
     fontSize: 14,
@@ -414,18 +382,6 @@ const styles = StyleSheet.create({
     color: '#d11a2a',
     fontSize: 13,
     fontWeight: '600',
-  },
-  saveButton: {
-    marginTop: 20,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  pressed: {
-    opacity: 0.85,
+    paddingVertical: 6,
   },
 });

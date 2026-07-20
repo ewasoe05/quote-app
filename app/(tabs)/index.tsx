@@ -238,8 +238,9 @@ const styles = StyleSheet.create({
   },
   newButton: {
     borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   newButtonPressed: {
     opacity: 0.85,
@@ -252,12 +253,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     gap: 8,
+    alignItems: 'center',
   },
   filterChip: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   filterChipText: {
     fontSize: 13,

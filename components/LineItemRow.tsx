@@ -60,7 +60,7 @@ export default function LineItemRow({
         <Text style={styles.name} numberOfLines={2}>
           {item.nameSnapshot}
         </Text>
-        <Pressable onPress={onRemove} hitSlop={8} accessibilityLabel="Remove item">
+        <Pressable onPress={onRemove} hitSlop={12} accessibilityLabel="Remove item">
           <Text style={styles.remove}>Remove</Text>
         </Pressable>
       </View>
@@ -163,20 +163,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stepBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepBtnText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '600',
-    lineHeight: 22,
+    lineHeight: 24,
   },
   qtyValue: {
-    minWidth: 24,
+    minWidth: 28,
     textAlign: 'center',
     fontSize: 16,
     fontWeight: '600',
@@ -185,12 +185,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    minHeight: 44,
+    paddingVertical: 10,
     fontSize: 16,
   },
   lineTotal: {
     fontSize: 15,
     fontWeight: '700',
-    paddingVertical: 8,
+    paddingVertical: 12,
   },
 });

@@ -32,3 +32,14 @@ SQLite schema and CRUD helpers live in `lib/db.ts` with types in `lib/types.ts`:
 - `Product` — catalog items
 - `Quote` — customer quotes
 - `QuoteItem` — line items with price snapshots
+
+All catalog and quote data stays on-device. The app is usable in airplane mode; PDF share uses the native share sheet after a local `expo-print` render.
+
+## Ship builds
+
+Branding, splash, and EAS profiles are in `app.json` / `eas.json`. See **[docs/BUILD.md](docs/BUILD.md)** for:
+
+- Linking an EAS project (`eas init`)
+- Android APK (`preview`) and AAB (`production`)
+- iOS TestFlight production build + submit
+- Offline / field checklist

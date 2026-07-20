@@ -2,17 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   TextInput,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 
+import KeyboardForm from '@/components/KeyboardForm';
 import { Text, View, useThemeColor } from '@/components/Themed';
+import { formStyles } from '@/constants/Form';
 import {
   createProduct,
   deleteProduct,
@@ -198,9 +197,7 @@ export default function EditProductScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <>
       <Stack.Screen
         options={{
           title: isEditing ? 'Edit Product' : 'Add Product',
@@ -208,7 +205,7 @@ export default function EditProductScreen() {
             <Pressable
               onPress={() => void handleSave()}
               disabled={saving}
-              hitSlop={8}
+              hitSlop={12}
               style={({ pressed }) => pressed && styles.headerPressed}>
               <Text style={[styles.headerAction, { color: tint }]}>
                 {saving ? 'Saving…' : 'Save'}
@@ -218,9 +215,7 @@ export default function EditProductScreen() {
         }}
       />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled">
+      <KeyboardForm style={{ backgroundColor: background }}>
         <FieldLabel>Name</FieldLabel>
         <TextInput
           value={name}
@@ -228,7 +223,7 @@ export default function EditProductScreen() {
           placeholder="Product name"
           placeholderTextColor="#999"
           style={[
-            styles.input,
+            formStyles.input,
             { color: textColor, backgroundColor: fieldBg, borderColor },
           ]}
           autoCapitalize="words"
@@ -244,14 +239,14 @@ export default function EditProductScreen() {
                 key={value}
                 onPress={() => setCategory(value)}
                 style={[
-                  styles.categoryChip,
+                  formStyles.chip,
                   {
                     borderColor: selected ? tint : borderColor,
                     backgroundColor: selected ? tint : fieldBg,
                   },
                 ]}>
                 <Text
-                  style={styles.categoryChipText}
+                  style={formStyles.chipText}
                   lightColor={selected ? '#fff' : '#111'}
                   darkColor={selected ? '#000' : '#fff'}>
                   {PRODUCT_CATEGORY_LABELS[value]}
@@ -268,8 +263,8 @@ export default function EditProductScreen() {
           placeholder="Optional details"
           placeholderTextColor="#999"
           style={[
-            styles.input,
-            styles.multiline,
+            formStyles.input,
+            formStyles.multiline,
             { color: textColor, backgroundColor: fieldBg, borderColor },
           ]}
           multiline
@@ -283,7 +278,7 @@ export default function EditProductScreen() {
           placeholder="0.00"
           placeholderTextColor="#999"
           style={[
-            styles.input,
+            formStyles.input,
             { color: textColor, backgroundColor: fieldBg, borderColor },
           ]}
           keyboardType="decimal-pad"
@@ -296,7 +291,7 @@ export default function EditProductScreen() {
           placeholder="0.00"
           placeholderTextColor="#999"
           style={[
-            styles.input,
+            formStyles.input,
             { color: textColor, backgroundColor: fieldBg, borderColor },
           ]}
           keyboardType="decimal-pad"
@@ -319,11 +314,11 @@ export default function EditProductScreen() {
           onPress={() => void handleSave()}
           disabled={saving}
           style={({ pressed }) => [
-            styles.primaryButton,
+            formStyles.primaryButton,
             { backgroundColor: tint },
-            (pressed || saving) && styles.buttonPressed,
+            (pressed || saving) && formStyles.pressed,
           ]}>
-          <Text style={styles.primaryButtonText} lightColor="#fff" darkColor="#000">
+          <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
             {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Create product'}
           </Text>
         </Pressable>
@@ -334,75 +329,37 @@ export default function EditProductScreen() {
             disabled={saving}
             style={({ pressed }) => [
               styles.deleteButton,
-              pressed && styles.buttonPressed,
+              pressed && formStyles.pressed,
             ]}>
             <Text style={styles.deleteButtonText}>Delete product</Text>
           </Pressable>
         ) : null}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardForm>
+    </>
   );
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <Text style={styles.label}>{children}</Text>;
+  return <Text style={formStyles.label}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 8,
-  },
-  label: {
-    marginTop: 8,
-    marginBottom: 2,
-    fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.65,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
-    fontSize: 16,
-  },
-  multiline: {
-    minHeight: 96,
-    paddingTop: 12,
   },
   categoryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  categoryChip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  categoryChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   toggleRow: {
     marginTop: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 10,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -411,29 +368,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  primaryButton: {
-    marginTop: 20,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
   deleteButton: {
     marginTop: 12,
     borderRadius: 12,
+    minHeight: 52,
     paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   deleteButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#d11a2a',
-  },
-  buttonPressed: {
-    opacity: 0.8,
   },
   headerAction: {
     fontSize: 17,

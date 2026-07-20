@@ -3,8 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,9 +11,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
+import KeyboardForm from '@/components/KeyboardForm';
 import LineItemRow from '@/components/LineItemRow';
 import ProductPicker from '@/components/ProductPicker';
 import { Text, View, useThemeColor } from '@/components/Themed';
+import { formStyles } from '@/constants/Form';
 import { calcQuoteTotals } from '@/lib/calc';
 import { getBusinessSettings } from '@/lib/db';
 import { shareQuotePdf } from '@/lib/pdf';
@@ -141,9 +141,11 @@ export default function QuoteBuilderScreen() {
       updateQuoteFields({ status: 'sent' });
       await flush();
     } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Something went wrong.';
       Alert.alert(
         'Could not share PDF',
-        err instanceof Error ? err.message : 'Something went wrong.'
+        `${message}\n\nQuotes and the catalog stay available offline. PDF share needs the device share sheet; try again when sharing is available.`
       );
     } finally {
       setSharing(false);
@@ -196,9 +198,7 @@ export default function QuoteBuilderScreen() {
   const title = quote.customerName.trim() || 'New Quote';
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardForm scroll={false} style={{ backgroundColor: background }}>
       <Stack.Screen
         options={{
           title,
@@ -211,8 +211,9 @@ export default function QuoteBuilderScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: 210 + insets.bottom }]}
-        keyboardShouldPersistTaps="handled">
+        contentContainerStyle={[styles.content, { paddingBottom: 220 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <Text style={styles.sectionTitle}>Status</Text>
         <View style={styles.statusRow} lightColor="transparent" darkColor="transparent">
           {QUOTE_STATUSES.map((status) => {
@@ -222,14 +223,14 @@ export default function QuoteBuilderScreen() {
                 key={status}
                 onPress={() => setStatus(status)}
                 style={[
-                  styles.statusChip,
+                  formStyles.chip,
                   {
                     borderColor: selected ? tint : borderColor,
                     backgroundColor: selected ? tint : fieldBg,
                   },
                 ]}>
                 <Text
-                  style={styles.statusChipText}
+                  style={formStyles.chipText}
                   lightColor={selected ? '#fff' : '#111'}
                   darkColor={selected ? '#000' : '#fff'}>
                   {QUOTE_STATUS_LABELS[status]}
@@ -265,7 +266,7 @@ export default function QuoteBuilderScreen() {
               placeholder="Customer name"
               placeholderTextColor="#999"
               style={[
-                styles.input,
+                formStyles.input,
                 { color: textColor, backgroundColor: fieldBg, borderColor },
               ]}
               autoCapitalize="words"
@@ -282,7 +283,7 @@ export default function QuoteBuilderScreen() {
               placeholderTextColor="#999"
               keyboardType="phone-pad"
               style={[
-                styles.input,
+                formStyles.input,
                 { color: textColor, backgroundColor: fieldBg, borderColor },
               ]}
             />
@@ -299,7 +300,7 @@ export default function QuoteBuilderScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               style={[
-                styles.input,
+                formStyles.input,
                 { color: textColor, backgroundColor: fieldBg, borderColor },
               ]}
             />
@@ -316,8 +317,8 @@ export default function QuoteBuilderScreen() {
               multiline
               textAlignVertical="top"
               style={[
-                styles.input,
-                styles.multiline,
+                formStyles.input,
+                formStyles.multiline,
                 { color: textColor, backgroundColor: fieldBg, borderColor },
               ]}
             />
@@ -331,7 +332,7 @@ export default function QuoteBuilderScreen() {
             style={({ pressed }) => [
               styles.addButton,
               { backgroundColor: tint },
-              pressed && styles.pressed,
+              pressed && formStyles.pressed,
             ]}>
             <Text style={styles.addButtonText} lightColor="#fff" darkColor="#000">
               Add Product
@@ -400,7 +401,7 @@ export default function QuoteBuilderScreen() {
               onSubmitEditing={commitDiscount}
               keyboardType="decimal-pad"
               style={[
-                styles.input,
+                formStyles.input,
                 styles.discountInput,
                 { color: textColor, backgroundColor: background, borderColor },
               ]}
@@ -415,7 +416,7 @@ export default function QuoteBuilderScreen() {
             onSubmitEditing={commitTax}
             keyboardType="decimal-pad"
             style={[
-              styles.input,
+              formStyles.input,
               { color: textColor, backgroundColor: background, borderColor },
             ]}
           />
@@ -451,11 +452,12 @@ export default function QuoteBuilderScreen() {
             void handleSharePdf();
           }}
           style={({ pressed }) => [
+            formStyles.primaryButton,
             styles.shareButton,
             { backgroundColor: tint },
-            (pressed || sharing) && styles.pressed,
+            (pressed || sharing) && formStyles.pressed,
           ]}>
-          <Text style={styles.shareButtonText} lightColor="#fff" darkColor="#000">
+          <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
             {sharing ? 'Preparing PDF…' : 'Share PDF'}
           </Text>
         </Pressable>
@@ -468,12 +470,12 @@ export default function QuoteBuilderScreen() {
           void handleSelectProduct(product);
         }}
       />
-    </KeyboardAvoidingView>
+    </KeyboardForm>
   );
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <Text style={styles.label}>{children}</Text>;
+  return <Text style={formStyles.label}>{children}</Text>;
 }
 
 function TotalsRow({ label, value }: { label: string; value: string }) {
@@ -504,20 +506,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  statusChip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  statusChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
   sectionHeader: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     paddingHorizontal: 14,
+    minHeight: 52,
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -544,25 +537,6 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 8,
   },
-  label: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: '600',
-    opacity: 0.6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-    fontSize: 16,
-  },
-  multiline: {
-    minHeight: 72,
-    paddingTop: 12,
-  },
   itemsHeader: {
     marginTop: 12,
     marginBottom: 4,
@@ -572,15 +546,13 @@ const styles = StyleSheet.create({
   },
   addButton: {
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   addButtonText: {
     fontSize: 14,
     fontWeight: '700',
-  },
-  pressed: {
-    opacity: 0.85,
   },
   emptyItems: {
     borderWidth: StyleSheet.hairlineWidth,
@@ -609,8 +581,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   typeChip: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
@@ -667,13 +639,6 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     marginTop: 10,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  shareButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
   },
   saving: {
     fontSize: 13,
