@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import { CATALOG_SEEDED_KEY, DEFAULT_CATALOG } from './seed';
+import { calculateQuoteTotal, type QuoteListItem } from './quotes';
 import type {
   NewProduct,
   NewQuote,
@@ -368,8 +369,24 @@ export async function updateQuote(
 
 export async function deleteQuote(id: string): Promise<boolean> {
   const db = await getDatabase();
+  // Explicitly remove line items first so deletes work even if FK cascade is off.
+  await db.runAsync('DELETE FROM quote_items WHERE quote_id = ?', id);
   const result = await db.runAsync('DELETE FROM quotes WHERE id = ?', id);
   return result.changes > 0;
+}
+
+export async function getQuotesWithTotals(): Promise<QuoteListItem[]> {
+  const quotes = await getAllQuotes();
+  return Promise.all(
+    quotes.map(async (quote) => {
+      const items = await getQuoteItemsByQuoteId(quote.id);
+      return {
+        ...quote,
+        total: calculateQuoteTotal(quote, items),
+        itemCount: items.length,
+      };
+    })
+  );
 }
 
 // --- Quote items ---

@@ -21,7 +21,21 @@ export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
   labor_misc: 'Labor/Misc',
 };
 
-export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'declined';
+export type QuoteStatus = 'draft' | 'sent' | 'won' | 'lost';
+
+export const QUOTE_STATUSES: QuoteStatus[] = [
+  'draft',
+  'sent',
+  'won',
+  'lost',
+];
+
+export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  draft: 'Draft',
+  sent: 'Sent',
+  won: 'Won',
+  lost: 'Lost',
+};
 
 export interface Product {
   id: string;
