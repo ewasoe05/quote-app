@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +17,8 @@ import LineItemRow from '@/components/LineItemRow';
 import ProductPicker from '@/components/ProductPicker';
 import { Text, View, useThemeColor } from '@/components/Themed';
 import { calcQuoteTotals } from '@/lib/calc';
+import { getBusinessSettings } from '@/lib/db';
+import { shareQuotePdf } from '@/lib/pdf';
 import { formatCurrency } from '@/lib/products';
 import type { DiscountType, Product } from '@/lib/types';
 import { useQuoteStore } from '@/store/quoteStore';
@@ -60,6 +63,7 @@ export default function QuoteBuilderScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [discountText, setDiscountText] = useState('0');
   const [taxText, setTaxText] = useState('0');
+  const [sharing, setSharing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -121,6 +125,30 @@ export default function QuoteBuilderScreen() {
     [addProduct]
   );
 
+  const handleSharePdf = useCallback(async () => {
+    if (!quote || sharing) return;
+
+    setSharing(true);
+    try {
+      await flush();
+      const business = await getBusinessSettings();
+      await shareQuotePdf({
+        quote: useQuoteStore.getState().quote ?? quote,
+        items: useQuoteStore.getState().items,
+        business,
+      });
+      updateQuoteFields({ status: 'sent' });
+      await flush();
+    } catch (err) {
+      Alert.alert(
+        'Could not share PDF',
+        err instanceof Error ? err.message : 'Something went wrong.'
+      );
+    } finally {
+      setSharing(false);
+    }
+  }, [flush, quote, sharing, updateQuoteFields]);
+
   const commitDiscount = () => {
     const parsed = Number(discountText.trim());
     if (!Number.isFinite(parsed) || parsed < 0) {
@@ -177,7 +205,7 @@ export default function QuoteBuilderScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
+        contentContainerStyle={[styles.content, { paddingBottom: 210 + insets.bottom }]}
         keyboardShouldPersistTaps="handled">
         <Pressable
           onPress={() => setCustomerOpen((open) => !open)}
@@ -383,6 +411,22 @@ export default function QuoteBuilderScreen() {
             {formatCurrency(totals.grandTotal)}
           </Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share PDF quote"
+          disabled={sharing}
+          onPress={() => {
+            void handleSharePdf();
+          }}
+          style={({ pressed }) => [
+            styles.shareButton,
+            { backgroundColor: tint },
+            (pressed || sharing) && styles.pressed,
+          ]}>
+          <Text style={styles.shareButtonText} lightColor="#fff" darkColor="#000">
+            {sharing ? 'Preparing PDF…' : 'Share PDF'}
+          </Text>
+        </Pressable>
       </View>
 
       <ProductPicker
@@ -571,6 +615,16 @@ const styles = StyleSheet.create({
   },
   grandValue: {
     fontSize: 18,
+    fontWeight: '700',
+  },
+  shareButton: {
+    marginTop: 10,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  shareButtonText: {
+    fontSize: 16,
     fontWeight: '700',
   },
   saving: {
