@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
-import { initializeDatabase, seedCatalogIfEmpty } from '@/lib/db';
+import { initializeDatabase, seedDefaultCatalog } from '@/lib/db';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -40,7 +40,7 @@ export default function RootLayout() {
     (async () => {
       try {
         await initializeDatabase();
-        await seedCatalogIfEmpty();
+        await seedDefaultCatalog();
         if (!cancelled) setDbReady(true);
       } catch (err) {
         if (!cancelled) {

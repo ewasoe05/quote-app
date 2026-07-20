@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 
-import { SEED_PRODUCTS } from './products';
+import { CATALOG_SEEDED_KEY, DEFAULT_CATALOG } from './seed';
 import type {
   NewProduct,
   NewQuote,
@@ -140,22 +140,63 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
       FOREIGN KEY (product_id) REFERENCES products(id)
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
   `);
 
   return db;
 }
 
-export async function seedCatalogIfEmpty(): Promise<number> {
-  const existing = await getAllProducts();
-  if (existing.length > 0) {
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM settings WHERE key = ?',
+    key
+  );
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    key,
+    value
+  );
+}
+
+/**
+ * One-time default catalog seed, guarded by settings.catalog_seeded.
+ * Fresh installs get DEFAULT_CATALOG once; later launches never re-insert.
+ */
+export async function seedDefaultCatalog(): Promise<number> {
+  const alreadySeeded = await getSetting(CATALOG_SEEDED_KEY);
+  if (alreadySeeded === '1') {
     return 0;
   }
 
-  for (const product of SEED_PRODUCTS) {
-    await createProduct(product);
+  const existing = await getAllProducts();
+  let inserted = 0;
+
+  if (existing.length === 0) {
+    for (const product of DEFAULT_CATALOG) {
+      await createProduct(product);
+      inserted += 1;
+    }
+    console.log(`[db] seeded ${inserted} default catalog products`);
+  } else {
+    // Upgrade path: products already present from an earlier seed — just set the flag.
+    console.log(
+      `[db] catalog seed flag set; skipped insert (${existing.length} products already present)`
+    );
   }
-  console.log(`[db] seeded ${SEED_PRODUCTS.length} catalog products`);
-  return SEED_PRODUCTS.length;
+
+  await setSetting(CATALOG_SEEDED_KEY, '1');
+  return inserted;
 }
 
 // --- Products ---
