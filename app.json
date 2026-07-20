@@ -35,7 +35,13 @@
         }
       ],
       "expo-sqlite",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Quote App to access your photos so you can add a company logo."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

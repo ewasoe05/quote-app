@@ -88,3 +88,27 @@ export type ProductSection = {
   title: string;
   data: Product[];
 };
+
+export type BusinessSettings = {
+  businessName: string;
+  phone: string;
+  email: string;
+  website: string;
+  address: string;
+  licenseNumber: string;
+  defaultTaxRate: number;
+  quoteFooter: string;
+  logoUri: string | null;
+};
+
+export const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
+  businessName: '',
+  phone: '',
+  email: '',
+  website: '',
+  address: '',
+  licenseNumber: '',
+  defaultTaxRate: 0,
+  quoteFooter: '',
+  logoUri: null,
+};

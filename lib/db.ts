@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import { CATALOG_SEEDED_KEY, DEFAULT_CATALOG } from './seed';
 import { calculateQuoteTotal, type QuoteListItem } from './quotes';
 import type {
+  BusinessSettings,
   DiscountType,
   NewProduct,
   NewQuote,
@@ -16,6 +17,7 @@ import type {
   UpdateQuote,
   UpdateQuoteItem,
 } from './types';
+import { DEFAULT_BUSINESS_SETTINGS } from './types';
 
 const DATABASE_NAME = 'quote-app.db';
 
@@ -182,6 +184,39 @@ export async function setSetting(key: string, value: string): Promise<void> {
     key,
     value
   );
+}
+
+export const BUSINESS_SETTINGS_KEY = 'business_info';
+
+export async function getBusinessSettings(): Promise<BusinessSettings> {
+  const raw = await getSetting(BUSINESS_SETTINGS_KEY);
+  if (!raw) {
+    return { ...DEFAULT_BUSINESS_SETTINGS };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<BusinessSettings>;
+    return {
+      ...DEFAULT_BUSINESS_SETTINGS,
+      ...parsed,
+      defaultTaxRate: Number(parsed.defaultTaxRate) || 0,
+      logoUri: parsed.logoUri ?? null,
+    };
+  } catch {
+    return { ...DEFAULT_BUSINESS_SETTINGS };
+  }
+}
+
+export async function saveBusinessSettings(
+  settings: BusinessSettings
+): Promise<void> {
+  const payload: BusinessSettings = {
+    ...DEFAULT_BUSINESS_SETTINGS,
+    ...settings,
+    defaultTaxRate: Math.max(0, Number(settings.defaultTaxRate) || 0),
+    logoUri: settings.logoUri || null,
+  };
+  await setSetting(BUSINESS_SETTINGS_KEY, JSON.stringify(payload));
 }
 
 /**

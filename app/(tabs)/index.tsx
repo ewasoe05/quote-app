@@ -10,7 +10,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 
 import QuoteCard from '@/components/QuoteCard';
 import { Text, View, useThemeColor } from '@/components/Themed';
-import { createQuote, deleteQuote, getQuotesWithTotals } from '@/lib/db';
+import { createQuote, deleteQuote, getBusinessSettings, getQuotesWithTotals } from '@/lib/db';
 import type { QuoteListItem } from '@/lib/quotes';
 
 export default function QuotesScreen() {
@@ -48,6 +48,7 @@ export default function QuotesScreen() {
     if (creating) return;
     setCreating(true);
     try {
+      const business = await getBusinessSettings();
       const quote = await createQuote({
         customerName: '',
         phone: '',
@@ -56,7 +57,7 @@ export default function QuotesScreen() {
         status: 'draft',
         discount: 0,
         discountType: 'flat',
-        taxRate: 0,
+        taxRate: business.defaultTaxRate || 0,
         notes: '',
       });
       router.push({ pathname: '/quote/[id]', params: { id: quote.id } });
