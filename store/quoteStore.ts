@@ -2,17 +2,28 @@ import { create } from 'zustand';
 
 import {
   createQuoteItem,
+  deleteQuoteItem,
   getQuoteById,
   getQuoteItemsByQuoteId,
   updateQuote,
   updateQuoteItem,
 } from '@/lib/db';
 import { getProductDisplayPrice } from '@/lib/products';
-import type { Product, Quote, QuoteItem } from '@/lib/types';
+import type { DiscountType, Product, Quote, QuoteItem } from '@/lib/types';
 
-type CustomerFields = Pick<
-  Quote,
-  'customerName' | 'phone' | 'email' | 'address'
+type QuoteEditableFields = Partial<
+  Pick<
+    Quote,
+    | 'customerName'
+    | 'phone'
+    | 'email'
+    | 'address'
+    | 'discount'
+    | 'discountType'
+    | 'taxRate'
+    | 'notes'
+    | 'status'
+  >
 >;
 
 type QuoteStore = {
@@ -22,24 +33,27 @@ type QuoteStore = {
   saving: boolean;
   loadError: string | null;
   loadQuote: (id: string) => Promise<void>;
-  updateCustomer: (fields: Partial<CustomerFields>) => void;
+  updateQuoteFields: (fields: QuoteEditableFields) => void;
+  /** @deprecated prefer updateQuoteFields */
+  updateCustomer: (
+    fields: Pick<QuoteEditableFields, 'customerName' | 'phone' | 'email' | 'address'>
+  ) => void;
   addProduct: (product: Product) => Promise<void>;
+  setItemQuantity: (itemId: string, quantity: number) => Promise<void>;
+  setItemPrice: (itemId: string, price: number) => Promise<void>;
+  removeItem: (itemId: string) => Promise<void>;
   flush: () => Promise<void>;
   reset: () => void;
 };
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingCustomer: Partial<CustomerFields> | null = null;
+let pendingQuoteFields: QuoteEditableFields | null = null;
 
 function clearSaveTimer() {
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-}
-
-async function persistCustomer(quoteId: string, fields: Partial<CustomerFields>) {
-  await updateQuote(quoteId, fields);
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -51,7 +65,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   reset: () => {
     clearSaveTimer();
-    pendingCustomer = null;
+    pendingQuoteFields = null;
     set({
       quote: null,
       items: [],
@@ -63,7 +77,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   loadQuote: async (id) => {
     clearSaveTimer();
-    pendingCustomer = null;
+    pendingQuoteFields = null;
     set({ loading: true, loadError: null });
     try {
       const quote = await getQuoteById(id);
@@ -86,12 +100,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }
   },
 
-  updateCustomer: (fields) => {
+  updateQuoteFields: (fields) => {
     const { quote } = get();
     if (!quote) return;
 
     const nextQuote = { ...quote, ...fields };
-    pendingCustomer = { ...(pendingCustomer ?? {}), ...fields };
+    pendingQuoteFields = { ...(pendingQuoteFields ?? {}), ...fields };
     set({ quote: nextQuote });
 
     clearSaveTimer();
@@ -100,16 +114,20 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }, 250);
   },
 
+  updateCustomer: (fields) => {
+    get().updateQuoteFields(fields);
+  },
+
   flush: async () => {
     clearSaveTimer();
     const { quote } = get();
-    const fields = pendingCustomer;
-    pendingCustomer = null;
+    const fields = pendingQuoteFields;
+    pendingQuoteFields = null;
     if (!quote || !fields || Object.keys(fields).length === 0) return;
 
     set({ saving: true });
     try {
-      await persistCustomer(quote.id, fields);
+      await updateQuote(quote.id, fields);
     } finally {
       set({ saving: false });
     }
@@ -119,7 +137,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     const { quote, items } = get();
     if (!quote) return;
 
-    // Ensure customer edits are not lost before adding items.
     await get().flush();
 
     const priceSnapshot = getProductDisplayPrice(product);
@@ -150,4 +167,73 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ saving: false });
     }
   },
+
+  setItemQuantity: async (itemId, quantity) => {
+    const nextQty = Math.max(1, Math.floor(quantity));
+    const { items } = get();
+    const existing = items.find((item) => item.id === itemId);
+    if (!existing || existing.quantity === nextQty) return;
+
+    // Optimistic update for instant totals.
+    set({
+      items: items.map((item) =>
+        item.id === itemId ? { ...item, quantity: nextQty } : item
+      ),
+    });
+
+    set({ saving: true });
+    try {
+      const updated = await updateQuoteItem(itemId, { quantity: nextQty });
+      if (updated) {
+        set({
+          items: get().items.map((item) =>
+            item.id === itemId ? updated : item
+          ),
+        });
+      }
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+  setItemPrice: async (itemId, price) => {
+    const nextPrice = Math.max(0, Math.round(price * 100) / 100);
+    const { items } = get();
+    const existing = items.find((item) => item.id === itemId);
+    if (!existing || existing.priceSnapshot === nextPrice) return;
+
+    set({
+      items: items.map((item) =>
+        item.id === itemId ? { ...item, priceSnapshot: nextPrice } : item
+      ),
+    });
+
+    set({ saving: true });
+    try {
+      const updated = await updateQuoteItem(itemId, {
+        priceSnapshot: nextPrice,
+      });
+      if (updated) {
+        set({
+          items: get().items.map((item) =>
+            item.id === itemId ? updated : item
+          ),
+        });
+      }
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+  removeItem: async (itemId) => {
+    const { items } = get();
+    set({ items: items.filter((item) => item.id !== itemId), saving: true });
+    try {
+      await deleteQuoteItem(itemId);
+    } finally {
+      set({ saving: false });
+    }
+  },
 }));
+
+export type { DiscountType };

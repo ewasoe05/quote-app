@@ -23,6 +23,8 @@ export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
 
 export type QuoteStatus = 'draft' | 'sent' | 'won' | 'lost';
 
+export type DiscountType = 'flat' | 'percent';
+
 export const QUOTE_STATUSES: QuoteStatus[] = [
   'draft',
   'sent',
@@ -55,6 +57,7 @@ export interface Quote {
   address: string;
   status: QuoteStatus;
   discount: number;
+  discountType: DiscountType;
   taxRate: number;
   notes: string;
   createdAt: string;

@@ -1,3 +1,4 @@
+import { calcQuoteTotals } from './calc';
 import { formatCurrency } from './products';
 import type { Quote, QuoteItem, QuoteStatus } from './types';
 import { QUOTE_STATUS_LABELS } from './types';
@@ -11,21 +12,16 @@ export function getQuoteStatusLabel(status: QuoteStatus): string {
   return QUOTE_STATUS_LABELS[status] ?? status;
 }
 
-export function calculateQuoteSubtotal(items: QuoteItem[]): number {
-  return items.reduce(
-    (sum, item) => sum + item.priceSnapshot * item.quantity,
-    0
-  );
-}
-
 export function calculateQuoteTotal(
-  quote: Pick<Quote, 'discount' | 'taxRate'>,
+  quote: Pick<Quote, 'discount' | 'discountType' | 'taxRate'>,
   items: QuoteItem[]
 ): number {
-  const subtotal = calculateQuoteSubtotal(items);
-  const afterDiscount = Math.max(0, subtotal - (quote.discount || 0));
-  const tax = afterDiscount * ((quote.taxRate || 0) / 100);
-  return afterDiscount + tax;
+  return calcQuoteTotals({
+    items,
+    discount: quote.discount,
+    discountType: quote.discountType ?? 'flat',
+    taxRate: quote.taxRate,
+  }).grandTotal;
 }
 
 export function formatQuoteDate(iso: string): string {

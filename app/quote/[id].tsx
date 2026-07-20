@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -9,21 +9,20 @@ import {
   StyleSheet,
   TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
+import LineItemRow from '@/components/LineItemRow';
 import ProductPicker from '@/components/ProductPicker';
 import { Text, View, useThemeColor } from '@/components/Themed';
+import { calcQuoteTotals } from '@/lib/calc';
 import { formatCurrency } from '@/lib/products';
-import {
-  calculateQuoteSubtotal,
-  calculateQuoteTotal,
-  formatQuoteTotal,
-} from '@/lib/quotes';
-import type { Product } from '@/lib/types';
+import type { DiscountType, Product } from '@/lib/types';
 import { useQuoteStore } from '@/store/quoteStore';
 
 export default function QuoteBuilderScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const quoteId = typeof id === 'string' ? id : '';
 
@@ -38,6 +37,10 @@ export default function QuoteBuilderScreen() {
     { light: '#dde1e6', dark: 'rgba(255,255,255,0.12)' },
     'text'
   );
+  const barBg = useThemeColor(
+    { light: '#ffffff', dark: '#111' },
+    'background'
+  );
 
   const quote = useQuoteStore((s) => s.quote);
   const items = useQuoteStore((s) => s.items);
@@ -45,13 +48,18 @@ export default function QuoteBuilderScreen() {
   const saving = useQuoteStore((s) => s.saving);
   const loadError = useQuoteStore((s) => s.loadError);
   const loadQuote = useQuoteStore((s) => s.loadQuote);
-  const updateCustomer = useQuoteStore((s) => s.updateCustomer);
+  const updateQuoteFields = useQuoteStore((s) => s.updateQuoteFields);
   const addProduct = useQuoteStore((s) => s.addProduct);
+  const setItemQuantity = useQuoteStore((s) => s.setItemQuantity);
+  const setItemPrice = useQuoteStore((s) => s.setItemPrice);
+  const removeItem = useQuoteStore((s) => s.removeItem);
   const flush = useQuoteStore((s) => s.flush);
   const reset = useQuoteStore((s) => s.reset);
 
   const [customerOpen, setCustomerOpen] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [discountText, setDiscountText] = useState('0');
+  const [taxText, setTaxText] = useState('0');
 
   useFocusEffect(
     useCallback(() => {
@@ -82,9 +90,28 @@ export default function QuoteBuilderScreen() {
     }
   }, [loadError, router]);
 
-  const title = quote?.customerName.trim() || 'New Quote';
-  const subtotal = calculateQuoteSubtotal(items);
-  const total = quote ? calculateQuoteTotal(quote, items) : 0;
+  useEffect(() => {
+    if (!quote) return;
+    setDiscountText(String(quote.discount ?? 0));
+    setTaxText(String(quote.taxRate ?? 0));
+  }, [quote?.id, quote?.discount, quote?.taxRate]);
+
+  const totals = useMemo(() => {
+    if (!quote) {
+      return calcQuoteTotals({
+        items: [],
+        discount: 0,
+        discountType: 'flat',
+        taxRate: 0,
+      });
+    }
+    return calcQuoteTotals({
+      items,
+      discount: quote.discount,
+      discountType: quote.discountType ?? 'flat',
+      taxRate: quote.taxRate,
+    });
+  }, [items, quote]);
 
   const handleSelectProduct = useCallback(
     async (product: Product) => {
@@ -94,6 +121,35 @@ export default function QuoteBuilderScreen() {
     [addProduct]
   );
 
+  const commitDiscount = () => {
+    const parsed = Number(discountText.trim());
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setDiscountText(String(quote?.discount ?? 0));
+      return;
+    }
+    const next = Math.round(parsed * 100) / 100;
+    setDiscountText(String(next));
+    updateQuoteFields({ discount: next });
+    void flush();
+  };
+
+  const commitTax = () => {
+    const parsed = Number(taxText.trim());
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setTaxText(String(quote?.taxRate ?? 0));
+      return;
+    }
+    const next = Math.round(parsed * 100) / 100;
+    setTaxText(String(next));
+    updateQuoteFields({ taxRate: next });
+    void flush();
+  };
+
+  const setDiscountType = (discountType: DiscountType) => {
+    updateQuoteFields({ discountType });
+    void flush();
+  };
+
   if (loading || !quote) {
     return (
       <View style={[styles.centered, { backgroundColor: background }]}>
@@ -102,6 +158,8 @@ export default function QuoteBuilderScreen() {
       </View>
     );
   }
+
+  const title = quote.customerName.trim() || 'New Quote';
 
   return (
     <KeyboardAvoidingView
@@ -119,7 +177,7 @@ export default function QuoteBuilderScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
         keyboardShouldPersistTaps="handled">
         <Pressable
           onPress={() => setCustomerOpen((open) => !open)}
@@ -140,7 +198,7 @@ export default function QuoteBuilderScreen() {
             <FieldLabel>Name</FieldLabel>
             <TextInput
               value={quote.customerName}
-              onChangeText={(customerName) => updateCustomer({ customerName })}
+              onChangeText={(customerName) => updateQuoteFields({ customerName })}
               onBlur={() => {
                 void flush();
               }}
@@ -156,7 +214,7 @@ export default function QuoteBuilderScreen() {
             <FieldLabel>Phone</FieldLabel>
             <TextInput
               value={quote.phone}
-              onChangeText={(phone) => updateCustomer({ phone })}
+              onChangeText={(phone) => updateQuoteFields({ phone })}
               onBlur={() => {
                 void flush();
               }}
@@ -172,7 +230,7 @@ export default function QuoteBuilderScreen() {
             <FieldLabel>Email</FieldLabel>
             <TextInput
               value={quote.email}
-              onChangeText={(email) => updateCustomer({ email })}
+              onChangeText={(email) => updateQuoteFields({ email })}
               onBlur={() => {
                 void flush();
               }}
@@ -189,7 +247,7 @@ export default function QuoteBuilderScreen() {
             <FieldLabel>Address</FieldLabel>
             <TextInput
               value={quote.address}
-              onChangeText={(address) => updateCustomer({ address })}
+              onChangeText={(address) => updateQuoteFields({ address })}
               onBlur={() => {
                 void flush();
               }}
@@ -230,35 +288,102 @@ export default function QuoteBuilderScreen() {
           </View>
         ) : (
           items.map((item) => (
-            <View
+            <LineItemRow
               key={item.id}
-              style={[styles.itemRow, { backgroundColor: fieldBg }]}>
-              <View style={styles.itemText} lightColor="transparent" darkColor="transparent">
-                <Text style={styles.itemName} numberOfLines={2}>
-                  {item.nameSnapshot}
-                </Text>
-                <Text style={styles.itemMeta}>
-                  {item.quantity} × {formatCurrency(item.priceSnapshot)}
-                </Text>
-              </View>
-              <Text style={styles.itemTotal}>
-                {formatCurrency(item.priceSnapshot * item.quantity)}
-              </Text>
-            </View>
+              item={item}
+              onQuantityChange={(quantity) => {
+                void setItemQuantity(item.id, quantity);
+              }}
+              onPriceChange={(price) => {
+                void setItemPrice(item.id, price);
+              }}
+              onRemove={() => {
+                void removeItem(item.id);
+              }}
+            />
           ))
         )}
 
-        <View style={[styles.totals, { borderColor }]}>
-          <View style={styles.totalRow} lightColor="transparent" darkColor="transparent">
-            <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
+        <View style={[styles.adjustments, { borderColor, backgroundColor: fieldBg }]}>
+          <Text style={styles.sectionTitle}>Adjustments</Text>
+
+          <FieldLabel>Discount</FieldLabel>
+          <View style={styles.discountRow} lightColor="transparent" darkColor="transparent">
+            <View style={styles.typeToggle} lightColor="transparent" darkColor="transparent">
+              {(['flat', 'percent'] as DiscountType[]).map((type) => {
+                const selected = (quote.discountType ?? 'flat') === type;
+                return (
+                  <Pressable
+                    key={type}
+                    onPress={() => setDiscountType(type)}
+                    style={[
+                      styles.typeChip,
+                      {
+                        borderColor: selected ? tint : borderColor,
+                        backgroundColor: selected ? tint : background,
+                      },
+                    ]}>
+                    <Text
+                      style={styles.typeChipText}
+                      lightColor={selected ? '#fff' : '#111'}
+                      darkColor={selected ? '#000' : '#fff'}>
+                      {type === 'flat' ? '$' : '%'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <TextInput
+              value={discountText}
+              onChangeText={setDiscountText}
+              onBlur={commitDiscount}
+              onSubmitEditing={commitDiscount}
+              keyboardType="decimal-pad"
+              style={[
+                styles.input,
+                styles.discountInput,
+                { color: textColor, backgroundColor: background, borderColor },
+              ]}
+            />
           </View>
-          <View style={styles.totalRow} lightColor="transparent" darkColor="transparent">
-            <Text style={styles.grandLabel}>Total</Text>
-            <Text style={styles.grandValue}>{formatQuoteTotal(total)}</Text>
-          </View>
+
+          <FieldLabel>Tax rate (%)</FieldLabel>
+          <TextInput
+            value={taxText}
+            onChangeText={setTaxText}
+            onBlur={commitTax}
+            onSubmitEditing={commitTax}
+            keyboardType="decimal-pad"
+            style={[
+              styles.input,
+              { color: textColor, backgroundColor: background, borderColor },
+            ]}
+          />
         </View>
       </ScrollView>
+
+      <View
+        style={[
+          styles.stickyBar,
+          {
+            backgroundColor: barBg,
+            borderColor,
+            paddingBottom: Math.max(insets.bottom, 12),
+          },
+        ]}>
+        <TotalsRow label="Subtotal" value={formatCurrency(totals.subtotal)} />
+        <TotalsRow
+          label={`Discount (${quote.discountType === 'percent' ? '%' : '$'})`}
+          value={`−${formatCurrency(totals.discountAmount)}`}
+        />
+        <TotalsRow label="Tax" value={formatCurrency(totals.tax)} />
+        <View style={styles.grandRow} lightColor="transparent" darkColor="transparent">
+          <Text style={styles.grandLabel}>Total</Text>
+          <Text style={[styles.grandValue, { color: tint }]}>
+            {formatCurrency(totals.grandTotal)}
+          </Text>
+        </View>
+      </View>
 
       <ProductPicker
         visible={pickerOpen}
@@ -275,6 +400,15 @@ function FieldLabel({ children }: { children: string }) {
   return <Text style={styles.label}>{children}</Text>;
 }
 
+function TotalsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.totalRow} lightColor="transparent" darkColor="transparent">
+      <Text style={styles.totalLabel}>{label}</Text>
+      <Text style={styles.totalValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -286,7 +420,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 40,
     gap: 8,
   },
   sectionHeader: {
@@ -367,37 +500,51 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     lineHeight: 20,
   },
-  itemRow: {
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  adjustments: {
+    marginTop: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 14,
+    gap: 4,
+  },
+  discountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 8,
+    gap: 10,
   },
-  itemText: {
+  typeToggle: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  typeChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeChipText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  discountInput: {
     flex: 1,
-    gap: 2,
   },
-  itemName: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  itemMeta: {
-    fontSize: 13,
-    opacity: 0.55,
-  },
-  itemTotal: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  totals: {
-    marginTop: 8,
+  stickyBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 14,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 4,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
   },
   totalRow: {
     flexDirection: 'row',
@@ -405,19 +552,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalLabel: {
-    fontSize: 15,
+    fontSize: 14,
     opacity: 0.65,
   },
   totalValue: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
   },
+  grandRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   grandLabel: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
   },
   grandValue: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
   },
   saving: {

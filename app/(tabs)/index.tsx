@@ -55,6 +55,7 @@ export default function QuotesScreen() {
         address: '',
         status: 'draft',
         discount: 0,
+        discountType: 'flat',
         taxRate: 0,
         notes: '',
       });

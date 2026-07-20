@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import { CATALOG_SEEDED_KEY, DEFAULT_CATALOG } from './seed';
 import { calculateQuoteTotal, type QuoteListItem } from './quotes';
 import type {
+  DiscountType,
   NewProduct,
   NewQuote,
   NewQuoteItem,
@@ -42,6 +43,7 @@ type QuoteRow = {
   address: string;
   status: string;
   discount: number;
+  discount_type: string;
   tax_rate: number;
   notes: string;
   created_at: string;
@@ -77,6 +79,7 @@ function mapQuote(row: QuoteRow): Quote {
     address: row.address,
     status: row.status as QuoteStatus,
     discount: row.discount,
+    discountType: (row.discount_type === 'percent' ? 'percent' : 'flat') as DiscountType,
     taxRate: row.tax_rate,
     notes: row.notes,
     createdAt: row.created_at,
@@ -126,6 +129,7 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       address TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'draft',
       discount REAL NOT NULL DEFAULT 0,
+      discount_type TEXT NOT NULL DEFAULT 'flat',
       tax_rate REAL NOT NULL DEFAULT 0,
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
@@ -147,6 +151,16 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       value TEXT NOT NULL
     );
   `);
+
+  // Migrate older DBs that predate discount_type.
+  const quoteColumns = await db.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(quotes)'
+  );
+  if (!quoteColumns.some((column) => column.name === 'discount_type')) {
+    await db.execAsync(
+      `ALTER TABLE quotes ADD COLUMN discount_type TEXT NOT NULL DEFAULT 'flat'`
+    );
+  }
 
   return db;
 }
@@ -294,6 +308,7 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
     address: input.address,
     status: input.status,
     discount: input.discount,
+    discountType: input.discountType ?? 'flat',
     taxRate: input.taxRate,
     notes: input.notes,
     createdAt: input.createdAt ?? new Date().toISOString(),
@@ -301,8 +316,8 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
 
   await db.runAsync(
     `INSERT INTO quotes (
-      id, customer_name, phone, email, address, status, discount, tax_rate, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, customer_name, phone, email, address, status, discount, discount_type, tax_rate, notes, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     quote.id,
     quote.customerName,
     quote.phone,
@@ -310,6 +325,7 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
     quote.address,
     quote.status,
     quote.discount,
+    quote.discountType,
     quote.taxRate,
     quote.notes,
     quote.createdAt
@@ -351,7 +367,7 @@ export async function updateQuote(
   await db.runAsync(
     `UPDATE quotes
      SET customer_name = ?, phone = ?, email = ?, address = ?, status = ?,
-         discount = ?, tax_rate = ?, notes = ?
+         discount = ?, discount_type = ?, tax_rate = ?, notes = ?
      WHERE id = ?`,
     next.customerName,
     next.phone,
@@ -359,6 +375,7 @@ export async function updateQuote(
     next.address,
     next.status,
     next.discount,
+    next.discountType,
     next.taxRate,
     next.notes,
     id

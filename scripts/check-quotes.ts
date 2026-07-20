@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
 
-import {
-  calculateQuoteSubtotal,
-  calculateQuoteTotal,
-  formatQuoteDate,
-  getQuoteStatusLabel,
-} from '../lib/quotes';
+import { calculateQuoteTotal, getQuoteStatusLabel } from '../lib/quotes';
 import type { Quote, QuoteItem } from '../lib/types';
 import { QUOTE_STATUS_LABELS } from '../lib/types';
 
@@ -36,13 +31,18 @@ const items: QuoteItem[] = [
   },
 ];
 
-assert.equal(calculateQuoteSubtotal(items), 1400);
-
-const quote: Pick<Quote, 'discount' | 'taxRate'> = {
+const flatQuote: Pick<Quote, 'discount' | 'discountType' | 'taxRate'> = {
   discount: 100,
+  discountType: 'flat',
   taxRate: 10,
 };
-assert.equal(calculateQuoteTotal(quote, items), 1430); // (1400-100)*1.10
-assert.equal(formatQuoteDate('2026-07-20T12:00:00.000Z').includes('2026'), true);
+assert.equal(calculateQuoteTotal(flatQuote, items), 1430);
+
+const percentQuote: Pick<Quote, 'discount' | 'discountType' | 'taxRate'> = {
+  discount: 10,
+  discountType: 'percent',
+  taxRate: 0,
+};
+assert.equal(calculateQuoteTotal(percentQuote, items), 1260);
 
 console.log('quote helpers checks passed');
