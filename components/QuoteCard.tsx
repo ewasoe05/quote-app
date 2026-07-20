@@ -14,6 +14,7 @@ import type { QuoteStatus } from '@/lib/types';
 type QuoteCardProps = {
   quote: QuoteListItem;
   onPress: (quote: QuoteListItem) => void;
+  onDuplicate: (quote: QuoteListItem) => void;
   onDelete: (quote: QuoteListItem) => void;
 };
 
@@ -27,7 +28,12 @@ const STATUS_COLORS: Record<
   lost: { bg: 'rgba(209,26,42,0.16)', text: '#d11a2a' },
 };
 
-export default function QuoteCard({ quote, onPress, onDelete }: QuoteCardProps) {
+export default function QuoteCard({
+  quote,
+  onPress,
+  onDuplicate,
+  onDelete,
+}: QuoteCardProps) {
   const swipeableRef = useRef<Swipeable>(null);
   const statusColors = STATUS_COLORS[quote.status] ?? STATUS_COLORS.draft;
   const customerLabel = quote.customerName.trim() || 'Untitled quote';
@@ -48,23 +54,49 @@ export default function QuoteCard({ quote, onPress, onDelete }: QuoteCardProps) 
     );
   };
 
+  const handleDuplicate = () => {
+    swipeableRef.current?.close();
+    onDuplicate(quote);
+  };
+
+  const openActions = () => {
+    Alert.alert(customerLabel, undefined, [
+      { text: 'Open', onPress: () => onPress(quote) },
+      { text: 'Duplicate', onPress: handleDuplicate },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: confirmDelete,
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const renderRightActions = (
     _progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>
   ) => {
     const scale = dragX.interpolate({
-      inputRange: [-80, 0],
-      outputRange: [1, 0.8],
+      inputRange: [-140, 0],
+      outputRange: [1, 0.85],
       extrapolate: 'clamp',
     });
 
     return (
-      <Pressable onPress={confirmDelete} style={styles.deleteAction}>
-        <Animated.Text
-          style={[styles.deleteActionText, { transform: [{ scale }] }]}>
-          Delete
-        </Animated.Text>
-      </Pressable>
+      <View style={styles.actions} lightColor="transparent" darkColor="transparent">
+        <Pressable onPress={handleDuplicate} style={styles.duplicateAction}>
+          <Animated.Text
+            style={[styles.actionText, { transform: [{ scale }] }]}>
+            Duplicate
+          </Animated.Text>
+        </Pressable>
+        <Pressable onPress={confirmDelete} style={styles.deleteAction}>
+          <Animated.Text
+            style={[styles.actionText, { transform: [{ scale }] }]}>
+            Delete
+          </Animated.Text>
+        </Pressable>
+      </View>
     );
   };
 
@@ -76,6 +108,8 @@ export default function QuoteCard({ quote, onPress, onDelete }: QuoteCardProps) 
       friction={2}>
       <Pressable
         onPress={() => onPress(quote)}
+        onLongPress={openActions}
+        delayLongPress={350}
         style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}>
         <View
           style={styles.card}
@@ -151,19 +185,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  actions: {
+    flexDirection: 'row',
+    marginBottom: 10,
+    marginRight: 16,
+  },
+  duplicateAction: {
+    backgroundColor: '#2f95dc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    width: 92,
+    paddingHorizontal: 10,
+  },
   deleteAction: {
     backgroundColor: '#d11a2a',
     justifyContent: 'center',
-    alignItems: 'flex-end',
-    marginBottom: 10,
-    marginRight: 16,
-    borderRadius: 12,
-    width: 88,
-    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+    width: 80,
+    paddingHorizontal: 10,
   },
-  deleteActionText: {
+  actionText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 13,
   },
 });

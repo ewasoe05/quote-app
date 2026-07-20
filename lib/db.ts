@@ -441,6 +441,42 @@ export async function getQuotesWithTotals(): Promise<QuoteListItem[]> {
   );
 }
 
+/**
+ * Copy a quote and its line items into a new independent draft.
+ * Snapshots are preserved; IDs and createdAt are fresh.
+ */
+export async function duplicateQuote(sourceId: string): Promise<Quote> {
+  const source = await getQuoteById(sourceId);
+  if (!source) {
+    throw new Error('Quote not found');
+  }
+
+  const items = await getQuoteItemsByQuoteId(sourceId);
+  const copy = await createQuote({
+    customerName: source.customerName,
+    phone: source.phone,
+    email: source.email,
+    address: source.address,
+    status: 'draft',
+    discount: source.discount,
+    discountType: source.discountType,
+    taxRate: source.taxRate,
+    notes: source.notes,
+  });
+
+  for (const item of items) {
+    await createQuoteItem({
+      quoteId: copy.id,
+      productId: item.productId,
+      nameSnapshot: item.nameSnapshot,
+      priceSnapshot: item.priceSnapshot,
+      quantity: item.quantity,
+    });
+  }
+
+  return copy;
+}
+
 // --- Quote items ---
 
 export async function createQuoteItem(input: NewQuoteItem): Promise<QuoteItem> {

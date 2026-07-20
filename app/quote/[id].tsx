@@ -20,7 +20,8 @@ import { calcQuoteTotals } from '@/lib/calc';
 import { getBusinessSettings } from '@/lib/db';
 import { shareQuotePdf } from '@/lib/pdf';
 import { formatCurrency } from '@/lib/products';
-import type { DiscountType, Product } from '@/lib/types';
+import type { DiscountType, Product, QuoteStatus } from '@/lib/types';
+import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from '@/lib/types';
 import { useQuoteStore } from '@/store/quoteStore';
 
 export default function QuoteBuilderScreen() {
@@ -178,6 +179,11 @@ export default function QuoteBuilderScreen() {
     void flush();
   };
 
+  const setStatus = (status: QuoteStatus) => {
+    updateQuoteFields({ status });
+    void flush();
+  };
+
   if (loading || !quote) {
     return (
       <View style={[styles.centered, { backgroundColor: background }]}>
@@ -207,6 +213,32 @@ export default function QuoteBuilderScreen() {
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: 210 + insets.bottom }]}
         keyboardShouldPersistTaps="handled">
+        <Text style={styles.sectionTitle}>Status</Text>
+        <View style={styles.statusRow} lightColor="transparent" darkColor="transparent">
+          {QUOTE_STATUSES.map((status) => {
+            const selected = quote.status === status;
+            return (
+              <Pressable
+                key={status}
+                onPress={() => setStatus(status)}
+                style={[
+                  styles.statusChip,
+                  {
+                    borderColor: selected ? tint : borderColor,
+                    backgroundColor: selected ? tint : fieldBg,
+                  },
+                ]}>
+                <Text
+                  style={styles.statusChipText}
+                  lightColor={selected ? '#fff' : '#111'}
+                  darkColor={selected ? '#000' : '#fff'}>
+                  {QUOTE_STATUS_LABELS[status]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <Pressable
           onPress={() => setCustomerOpen((open) => !open)}
           style={[styles.sectionHeader, { borderColor }]}>
@@ -465,6 +497,22 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     gap: 8,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  statusChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statusChipText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   sectionHeader: {
     borderWidth: StyleSheet.hairlineWidth,
