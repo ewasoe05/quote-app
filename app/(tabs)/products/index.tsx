@@ -1,19 +1,21 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   SectionList,
   StyleSheet,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 
 import ProductCard from '@/components/ProductCard';
 import { Text, View, useThemeColor } from '@/components/Themed';
-import { getAllProducts } from '@/lib/db';
+import { deleteProduct, getAllProducts } from '@/lib/db';
 import { groupProductsByCategory } from '@/lib/products';
 import type { Product, ProductSection } from '@/lib/types';
 
 export default function ProductsScreen() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const tint = useThemeColor({}, 'tint');
@@ -33,6 +35,37 @@ export default function ProductsScreen() {
       setLoading(true);
       void loadProducts();
     }, [loadProducts])
+  );
+
+  const openCreate = useCallback(() => {
+    router.push('/products/edit');
+  }, [router]);
+
+  const openEdit = useCallback(
+    (product: Product) => {
+      router.push({
+        pathname: '/products/edit',
+        params: { id: product.id },
+      });
+    },
+    [router]
+  );
+
+  const handleDelete = useCallback(
+    async (product: Product) => {
+      try {
+        await deleteProduct(product.id);
+        setProducts((current) =>
+          current.filter((item) => item.id !== product.id)
+        );
+      } catch (err) {
+        Alert.alert(
+          'Delete failed',
+          err instanceof Error ? err.message : 'Could not delete product.'
+        );
+      }
+    },
+    []
   );
 
   const sections: ProductSection[] = groupProductsByCategory(products);
@@ -56,9 +89,20 @@ export default function ProductsScreen() {
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ProductCard product={item} />}
+          renderItem={({ item }) => (
+            <ProductCard
+              product={item}
+              onEdit={openEdit}
+              onDelete={(product) => {
+                void handleDelete(product);
+              }}
+            />
+          )}
           renderSectionHeader={({ section }) => (
-            <View style={styles.sectionHeader} lightColor="#fff" darkColor="#000">
+            <View
+              style={styles.sectionHeader}
+              lightColor="#fff"
+              darkColor="#000">
               <Text style={styles.sectionTitle}>{section.title}</Text>
             </View>
           )}
@@ -75,9 +119,7 @@ export default function ProductsScreen() {
           { backgroundColor: tint },
           pressed && styles.fabPressed,
         ]}
-        onPress={() => {
-          // Add-product screen lands in a later step.
-        }}>
+        onPress={openCreate}>
         <Text style={styles.fabLabel} lightColor="#fff" darkColor="#000">
           +
         </Text>
