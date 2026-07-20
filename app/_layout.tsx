@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
-import { debugInsertAndReadProduct, initializeDatabase } from '@/lib/db';
+import { initializeDatabase, seedCatalogIfEmpty } from '@/lib/db';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -39,8 +39,7 @@ export default function RootLayout() {
     (async () => {
       try {
         await initializeDatabase();
-        // Temporary Step 2 smoke test — insert and read back a product.
-        await debugInsertAndReadProduct();
+        await seedCatalogIfEmpty();
         if (!cancelled) setDbReady(true);
       } catch (err) {
         if (!cancelled) {

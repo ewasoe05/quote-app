@@ -2,7 +2,24 @@ export type ProductCategory =
   | 'softeners'
   | 'ro_systems'
   | 'iron_filters'
-  | 'add_ons';
+  | 'add_ons'
+  | 'labor_misc';
+
+export const PRODUCT_CATEGORIES: ProductCategory[] = [
+  'softeners',
+  'ro_systems',
+  'iron_filters',
+  'add_ons',
+  'labor_misc',
+];
+
+export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
+  softeners: 'Softeners',
+  ro_systems: 'RO',
+  iron_filters: 'Iron Filters',
+  add_ons: 'Add-ons',
+  labor_misc: 'Labor/Misc',
+};
 
 export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'declined';
 
@@ -48,3 +65,9 @@ export type UpdateQuote = Partial<Omit<Quote, 'id' | 'createdAt'>>;
 
 export type NewQuoteItem = Omit<QuoteItem, 'id'>;
 export type UpdateQuoteItem = Partial<Omit<QuoteItem, 'id' | 'quoteId'>>;
+
+export type ProductSection = {
+  category: ProductCategory;
+  title: string;
+  data: Product[];
+};

@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 
+import { SEED_PRODUCTS } from './products';
 import type {
   NewProduct,
   NewQuote,
@@ -144,24 +145,17 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
-/** Temporary debug helper used during Step 2 verification. */
-export async function debugInsertAndReadProduct(): Promise<Product> {
-  const testProduct = await createProduct({
-    name: 'Debug Softener',
-    category: 'softeners',
-    description: 'Temporary product for DB smoke test',
-    unitPrice: 1299,
-    laborPrice: 250,
-    active: true,
-  });
-
-  const readBack = await getProductById(testProduct.id);
-  if (!readBack) {
-    throw new Error('Debug product insert succeeded but read-back failed');
+export async function seedCatalogIfEmpty(): Promise<number> {
+  const existing = await getAllProducts();
+  if (existing.length > 0) {
+    return 0;
   }
 
-  console.log('[db] debug product insert/read OK:', readBack);
-  return readBack;
+  for (const product of SEED_PRODUCTS) {
+    await createProduct(product);
+  }
+  console.log(`[db] seeded ${SEED_PRODUCTS.length} catalog products`);
+  return SEED_PRODUCTS.length;
 }
 
 // --- Products ---
