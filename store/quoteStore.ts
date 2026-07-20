@@ -97,7 +97,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     clearSaveTimer();
     saveTimer = setTimeout(() => {
       void get().flush();
-    }, 400);
+    }, 250);
   },
 
   flush: async () => {

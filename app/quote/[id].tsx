@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -67,6 +68,15 @@ export default function QuoteBuilderScreen() {
   );
 
   useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        void flush();
+      }
+    });
+    return () => sub.remove();
+  }, [flush]);
+
+  useEffect(() => {
     if (loadError) {
       router.back();
     }
@@ -131,6 +141,9 @@ export default function QuoteBuilderScreen() {
             <TextInput
               value={quote.customerName}
               onChangeText={(customerName) => updateCustomer({ customerName })}
+              onBlur={() => {
+                void flush();
+              }}
               placeholder="Customer name"
               placeholderTextColor="#999"
               style={[
@@ -144,6 +157,9 @@ export default function QuoteBuilderScreen() {
             <TextInput
               value={quote.phone}
               onChangeText={(phone) => updateCustomer({ phone })}
+              onBlur={() => {
+                void flush();
+              }}
               placeholder="Phone"
               placeholderTextColor="#999"
               keyboardType="phone-pad"
@@ -157,6 +173,9 @@ export default function QuoteBuilderScreen() {
             <TextInput
               value={quote.email}
               onChangeText={(email) => updateCustomer({ email })}
+              onBlur={() => {
+                void flush();
+              }}
               placeholder="Email"
               placeholderTextColor="#999"
               keyboardType="email-address"
@@ -171,6 +190,9 @@ export default function QuoteBuilderScreen() {
             <TextInput
               value={quote.address}
               onChangeText={(address) => updateCustomer({ address })}
+              onBlur={() => {
+                void flush();
+              }}
               placeholder="Service address"
               placeholderTextColor="#999"
               multiline
