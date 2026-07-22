@@ -140,8 +140,24 @@ export default function QuoteBuilderScreen() {
         items: useQuoteStore.getState().items,
         business,
       });
-      updateQuoteFields({ status: 'sent' });
-      await flush();
+      // iOS share sheet resolves on dismiss (including cancel), so ask before
+      // flipping status — do not infer that the PDF was actually sent.
+      if (quote.status !== 'sent') {
+        Alert.alert(
+          'Mark as sent?',
+          'Did you send this quote to the customer?',
+          [
+            { text: 'Not yet', style: 'cancel' },
+            {
+              text: 'Mark as sent',
+              onPress: () => {
+                updateQuoteFields({ status: 'sent' });
+                void flush();
+              },
+            },
+          ]
+        );
+      }
     } catch (err) {
       captureException(err, { action: 'share-pdf', quoteId: quote.id });
       const message =

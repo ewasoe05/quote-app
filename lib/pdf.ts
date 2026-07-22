@@ -24,7 +24,9 @@ async function logoToDataUri(logoUri: string | null): Promise<string | null> {
           ? 'image/webp'
           : ext === 'gif'
             ? 'image/gif'
-            : 'image/jpeg';
+            : ext === 'heic' || ext === 'heif'
+              ? 'image/heic'
+              : 'image/jpeg';
     return `data:${mime};base64,${base64}`;
   } catch {
     return null;
@@ -82,11 +84,13 @@ export async function createQuotePdfFile(
 
 /**
  * Renders the quote PDF and opens the native share sheet.
- * Returns whether sharing completed without throwing.
+ *
+ * On iOS, expo-sharing resolves when the sheet is dismissed — including cancel —
+ * so callers must not treat resolution as proof the PDF was sent.
  */
 export async function shareQuotePdf(
   input: QuotePdfInput
-): Promise<{ uri: string; shared: boolean }> {
+): Promise<{ uri: string }> {
   const { uri } = await createQuotePdfFile(input);
 
   const available = await Sharing.isAvailableAsync();
@@ -103,5 +107,5 @@ export async function shareQuotePdf(
     dialogTitle: `Share quote for ${customerName} (${businessName})`,
   });
 
-  return { uri, shared: true };
+  return { uri };
 }
