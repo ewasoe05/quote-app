@@ -29,14 +29,12 @@
     "react-native-screens": "4.25.2",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.10.0",
-    "typescript": "~6.0.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "eas-cli": "^21.0.2",
     "tsx": "^4.23.1",
-    "typescript": "~6.0.3"
+    "typescript": "~5.9.2"
   },
   "scripts": {
     "start": "expo start",
@@ -44,11 +42,11 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "check": "npx tsc --noEmit && npx tsx scripts/check-calc.ts && npx tsx scripts/check-products.ts && npx tsx scripts/check-quotes.ts && npx tsx scripts/check-quote-numbers.ts && npx tsx scripts/check-business-settings.ts && npx tsx scripts/check-pdf.ts && npx tsx scripts/check-duplicate.ts && npx tsx scripts/check-seed-guard.ts",
-    "build:android:preview": "eas build --platform android --profile preview --non-interactive",
-    "build:android:production": "eas build --platform android --profile production --non-interactive",
-    "build:ios:preview": "eas build --platform ios --profile preview",
-    "build:ios:production": "eas build --platform ios --profile production",
-    "submit:ios": "eas submit --platform ios --profile production"
+    "build:android:preview": "npx eas-cli build --platform android --profile preview --non-interactive",
+    "build:android:production": "npx eas-cli build --platform android --profile production --non-interactive",
+    "build:ios:preview": "npx eas-cli build --platform ios --profile preview",
+    "build:ios:production": "npx eas-cli build --platform ios --profile production",
+    "submit:ios": "npx eas-cli submit --platform ios --profile production"
   },
   "private": true
 }
