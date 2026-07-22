@@ -11,9 +11,12 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
 
+import { PrimaryButton, SecondaryButton } from '@/components/Buttons';
+import FieldLabel from '@/components/FieldLabel';
 import KeyboardForm from '@/components/KeyboardForm';
-import { Text, View, useThemeColor } from '@/components/Themed';
+import { Text, View, useSurfaceColors } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
+import { fonts } from '@/constants/Typography';
 import { exportBackup, importBackup } from '@/lib/backup';
 import {
   getBusinessSettings,
@@ -28,17 +31,15 @@ import type { BusinessSettings } from '@/lib/types';
 import { DEFAULT_BUSINESS_SETTINGS } from '@/lib/types';
 
 export default function SettingsScreen() {
-  const tint = useThemeColor({}, 'tint');
-  const textColor = useThemeColor({}, 'text');
-  const background = useThemeColor({}, 'background');
-  const fieldBg = useThemeColor(
-    { light: '#f2f3f5', dark: 'rgba(255,255,255,0.08)' },
-    'background'
-  );
-  const borderColor = useThemeColor(
-    { light: '#dde1e6', dark: 'rgba(255,255,255,0.12)' },
-    'text'
-  );
+  const {
+    tint,
+    text: textColor,
+    background,
+    field: fieldBg,
+    border: borderColor,
+    navy,
+    muted,
+  } = useSurfaceColors();
 
   const [settings, setSettings] = useState<BusinessSettings>({
     ...DEFAULT_BUSINESS_SETTINGS,
@@ -106,7 +107,7 @@ export default function SettingsScreen() {
     }
     const accent = settings.accentColor.trim();
     if (!/^#([0-9a-fA-F]{6})$/.test(accent)) {
-      Alert.alert('Invalid accent color', 'Use a hex color like #2b6cb0.');
+      Alert.alert('Invalid accent color', 'Use a hex color like #1F6FEB.');
       return;
     }
 
@@ -260,8 +261,8 @@ export default function SettingsScreen() {
 
   return (
     <KeyboardForm style={{ backgroundColor: background }}>
-      <Text style={styles.heading}>Business info</Text>
-      <Text style={styles.subheading}>
+      <Text style={[formStyles.screenTitle, { color: navy }]}>Business info</Text>
+      <Text style={[formStyles.screenSubtitle, { color: muted }]}>
         Shown on every quote PDF. Default tax rate applies to new quotes.
       </Text>
 
@@ -279,19 +280,12 @@ export default function SettingsScreen() {
           </View>
         )}
         <View style={styles.logoActions} lightColor="transparent" darkColor="transparent">
-          <Pressable
+          <SecondaryButton
+            label={settings.logoUri ? 'Change logo' : 'Choose logo'}
             onPress={() => {
               void handlePickLogo();
             }}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              { borderColor, backgroundColor: fieldBg },
-              pressed && formStyles.pressed,
-            ]}>
-            <Text style={[styles.secondaryButtonText, { color: tint }]}>
-              {settings.logoUri ? 'Change logo' : 'Choose logo'}
-            </Text>
-          </Pressable>
+          />
           {settings.logoUri ? (
             <Pressable onPress={() => void handleRemoveLogo()} hitSlop={12}>
               <Text style={styles.removeLogo}>Remove</Text>
@@ -472,7 +466,7 @@ export default function SettingsScreen() {
       <TextInput
         value={settings.accentColor}
         onChangeText={(accentColor) => updateField('accentColor', accentColor)}
-        placeholder="#2b6cb0"
+        placeholder="#1F6FEB"
         placeholderTextColor="#999"
         autoCapitalize="none"
         autoCorrect={false}
@@ -497,60 +491,37 @@ export default function SettingsScreen() {
         ]}
       />
 
-      <Pressable
+      <PrimaryButton
+        label={saving ? 'Saving…' : 'Save settings'}
         onPress={() => {
           void handleSave();
         }}
         disabled={saving || backupBusy}
-        style={({ pressed }) => [
-          formStyles.primaryButton,
-          { backgroundColor: tint },
-          (pressed || saving || backupBusy) && formStyles.pressed,
-        ]}>
-        <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
-          {saving ? 'Saving…' : 'Save settings'}
-        </Text>
-      </Pressable>
+      />
 
-      <Text style={[styles.heading, styles.backupHeading]}>Backup</Text>
-      <Text style={styles.subheading}>
+      <Text style={[formStyles.screenTitle, styles.backupHeading, { color: navy }]}>
+        Backup
+      </Text>
+      <Text style={[formStyles.screenSubtitle, { color: muted }]}>
         Export a zip of your database and media to Files or iCloud. Import
         replaces everything on this phone. Sync across devices is not included.
       </Text>
-      <Pressable
+      <SecondaryButton
+        label={backupBusy ? 'Working…' : 'Export backup'}
         onPress={() => {
           void handleExportBackup();
         }}
         disabled={backupBusy}
-        style={({ pressed }) => [
-          styles.secondaryButton,
-          styles.backupButton,
-          { borderColor, backgroundColor: fieldBg },
-          (pressed || backupBusy) && formStyles.pressed,
-        ]}>
-        <Text style={[styles.secondaryButtonText, { color: tint }]}>
-          {backupBusy ? 'Working…' : 'Export backup'}
-        </Text>
-      </Pressable>
-      <Pressable
+        style={styles.backupButton}
+      />
+      <SecondaryButton
+        label="Import backup"
         onPress={handleImportBackup}
         disabled={backupBusy}
-        style={({ pressed }) => [
-          styles.secondaryButton,
-          styles.backupButton,
-          { borderColor, backgroundColor: fieldBg },
-          (pressed || backupBusy) && formStyles.pressed,
-        ]}>
-        <Text style={[styles.secondaryButtonText, { color: tint }]}>
-          Import backup
-        </Text>
-      </Pressable>
+        style={styles.backupButton}
+      />
     </KeyboardForm>
   );
-}
-
-function FieldLabel({ children }: { children: string }) {
-  return <Text style={formStyles.label}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -559,21 +530,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heading: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
   backupHeading: {
     marginTop: 28,
-  },
-  subheading: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.65,
-    marginBottom: 12,
+    fontSize: 20,
   },
   backupButton: {
+    marginTop: 0,
     marginBottom: 10,
     alignSelf: 'stretch',
   },
@@ -588,6 +550,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   fieldHint: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     opacity: 0.55,
     marginBottom: 8,
@@ -612,8 +575,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   typeChipText: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
   },
   depositInput: {
     flex: 1,
@@ -638,27 +601,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoPlaceholderText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     opacity: 0.55,
   },
   logoActions: {
     gap: 8,
-  },
-  secondaryButton: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    flex: 1,
   },
   removeLogo: {
     color: '#d11a2a',
+    fontFamily: fonts.semibold,
     fontSize: 13,
-    fontWeight: '600',
     paddingVertical: 6,
   },
 });

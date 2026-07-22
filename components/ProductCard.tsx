@@ -2,7 +2,9 @@ import { useRef } from 'react';
 import { Alert, Animated, Pressable, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 
-import { Text, View } from '@/components/Themed';
+import ListCard from '@/components/ListCard';
+import { Text, View, useSurfaceColors } from '@/components/Themed';
+import { fonts } from '@/constants/Typography';
 import { formatCurrency, getProductDisplayPrice } from '@/lib/products';
 import type { Product } from '@/lib/types';
 
@@ -21,6 +23,7 @@ export default function ProductCard({
 }: ProductCardProps) {
   const swipeableRef = useRef<Swipeable>(null);
   const price = getProductDisplayPrice(product, catalog);
+  const { danger, navy, muted } = useSurfaceColors();
 
   const confirmDelete = () => {
     swipeableRef.current?.close();
@@ -64,8 +67,11 @@ export default function ProductCard({
     });
 
     return (
-      <Pressable onPress={confirmDelete} style={styles.deleteAction}>
-        <Animated.Text style={[styles.deleteActionText, { transform: [{ scale }] }]}>
+      <Pressable
+        onPress={confirmDelete}
+        style={[styles.deleteAction, { backgroundColor: danger }]}>
+        <Animated.Text
+          style={[styles.deleteActionText, { transform: [{ scale }] }]}>
           Delete
         </Animated.Text>
       </Pressable>
@@ -83,29 +89,34 @@ export default function ProductCard({
         onLongPress={openActions}
         delayLongPress={350}
         style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}>
-        <View
-          style={[styles.card, !product.active && styles.inactiveCard]}
-          lightColor="#f7f8fa"
-          darkColor="rgba(255,255,255,0.06)">
+        <ListCard
+          style={[styles.card, !product.active && styles.inactiveCard]}>
           <View style={styles.nameBlock} lightColor="transparent" darkColor="transparent">
             <Text
-              style={[styles.name, !product.active && styles.inactiveText]}
+              style={[styles.name, { color: navy }, !product.active && styles.inactiveText]}
               numberOfLines={2}>
               {product.name}
             </Text>
             <View style={styles.badgeRow} lightColor="transparent" darkColor="transparent">
               {product.kind === 'package' ? (
-                <Text style={styles.kitBadge}>Kit</Text>
+                <Text style={[styles.kitBadge, { color: muted }]}>Kit</Text>
               ) : null}
               {!product.active ? (
-                <Text style={styles.inactiveBadge}>Inactive</Text>
+                <Text style={[styles.inactiveBadge, { color: muted }]}>
+                  Inactive
+                </Text>
               ) : null}
             </View>
           </View>
-          <Text style={[styles.price, !product.active && styles.inactiveText]}>
+          <Text
+            style={[
+              styles.price,
+              { color: muted },
+              !product.active && styles.inactiveText,
+            ]}>
             {formatCurrency(price)}
           </Text>
-        </View>
+        </ListCard>
       </Pressable>
     </Swipeable>
   );
@@ -117,16 +128,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.85,
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
   },
   inactiveCard: {
     opacity: 0.72,
@@ -141,20 +149,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   name: {
+    fontFamily: fonts.semibold,
     fontSize: 16,
-    fontWeight: '600',
   },
   kitBadge: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
-    opacity: 0.65,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
   inactiveBadge: {
+    fontFamily: fonts.semibold,
     fontSize: 12,
-    fontWeight: '600',
-    opacity: 0.55,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
@@ -162,23 +168,21 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   price: {
+    fontFamily: fonts.medium,
     fontSize: 15,
-    fontWeight: '500',
-    opacity: 0.75,
   },
   deleteAction: {
-    backgroundColor: '#d11a2a',
     justifyContent: 'center',
     alignItems: 'flex-end',
     marginBottom: 8,
     marginRight: 16,
-    borderRadius: 10,
+    borderRadius: 12,
     width: 88,
     paddingHorizontal: 16,
   },
   deleteActionText: {
     color: '#fff',
-    fontWeight: '700',
+    fontFamily: fonts.bold,
     fontSize: 14,
   },
 });

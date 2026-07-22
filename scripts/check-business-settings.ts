@@ -30,7 +30,7 @@ function mergeBusinessSettings(
 
 assert.deepEqual(mergeBusinessSettings(null), DEFAULT_BUSINESS_SETTINGS);
 assert.equal(DEFAULT_BUSINESS_SETTINGS.defaultValidDays, 7);
-assert.equal(DEFAULT_BUSINESS_SETTINGS.accentColor, '#2b6cb0');
+assert.equal(DEFAULT_BUSINESS_SETTINGS.accentColor, '#1F6FEB');
 
 const saved = mergeBusinessSettings(
   JSON.stringify({

@@ -2,7 +2,11 @@ import { useRef } from 'react';
 import { Alert, Animated, Pressable, StyleSheet } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 
-import { Text, View } from '@/components/Themed';
+import ListCard from '@/components/ListCard';
+import { Text, View, useSurfaceColors, useThemeColor } from '@/components/Themed';
+import { useColorScheme } from '@/components/useColorScheme';
+import { STATUS_COLORS, STATUS_COLORS_DARK } from '@/constants/Status';
+import { fonts } from '@/constants/Typography';
 import {
   isFollowUpDue,
   isFollowUpDueToday,
@@ -15,7 +19,6 @@ import {
   getQuoteStatusLabel,
   type QuoteListItem,
 } from '@/lib/quotes';
-import type { QuoteStatus } from '@/lib/types';
 
 type QuoteCardProps = {
   quote: QuoteListItem;
@@ -24,16 +27,6 @@ type QuoteCardProps = {
   onDuplicateNewCustomer: (quote: QuoteListItem) => void;
   onUseTemplate: (quote: QuoteListItem) => void;
   onDelete: (quote: QuoteListItem) => void;
-};
-
-const STATUS_COLORS: Record<
-  QuoteStatus,
-  { bg: string; text: string }
-> = {
-  draft: { bg: 'rgba(120,120,128,0.18)', text: '#636366' },
-  sent: { bg: 'rgba(47,149,220,0.18)', text: '#1a6fa8' },
-  won: { bg: 'rgba(52,199,89,0.18)', text: '#248a3d' },
-  lost: { bg: 'rgba(209,26,42,0.16)', text: '#d11a2a' },
 };
 
 export default function QuoteCard({
@@ -45,7 +38,12 @@ export default function QuoteCard({
   onDelete,
 }: QuoteCardProps) {
   const swipeableRef = useRef<Swipeable>(null);
-  const statusColors = STATUS_COLORS[quote.status] ?? STATUS_COLORS.draft;
+  const scheme = useColorScheme();
+  const palette = scheme === 'dark' ? STATUS_COLORS_DARK : STATUS_COLORS;
+  const statusColors = palette[quote.status] ?? palette.draft;
+  const { tint, danger, navy } = useSurfaceColors();
+  const muted = useThemeColor({}, 'muted');
+
   const customerLabel = quote.isTemplate
     ? quote.notes.trim() || quote.customerName.trim() || 'Untitled template'
     : quote.customerName.trim() || 'Untitled quote';
@@ -135,13 +133,15 @@ export default function QuoteCard({
             if (quote.isTemplate) onUseTemplate(quote);
             else onDuplicate(quote);
           }}
-          style={styles.duplicateAction}>
+          style={[styles.duplicateAction, { backgroundColor: tint }]}>
           <Animated.Text
             style={[styles.actionText, { transform: [{ scale }] }]}>
             {quote.isTemplate ? 'Use' : 'Duplicate'}
           </Animated.Text>
         </Pressable>
-        <Pressable onPress={confirmDelete} style={styles.deleteAction}>
+        <Pressable
+          onPress={confirmDelete}
+          style={[styles.deleteAction, { backgroundColor: danger }]}>
           <Animated.Text
             style={[styles.actionText, { transform: [{ scale }] }]}>
             Delete
@@ -162,18 +162,15 @@ export default function QuoteCard({
         onLongPress={openActions}
         delayLongPress={350}
         style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}>
-        <View
-          style={styles.card}
-          lightColor="#f7f8fa"
-          darkColor="rgba(255,255,255,0.06)">
+        <ListCard style={styles.cardInner}>
           <View style={styles.topRow} lightColor="transparent" darkColor="transparent">
-            <Text style={styles.name} numberOfLines={1}>
+            <Text style={[styles.name, { color: navy }]} numberOfLines={1}>
               {customerLabel}
             </Text>
             <View style={styles.badges} lightColor="transparent" darkColor="transparent">
               {quote.isTemplate ? (
                 <View style={[styles.badge, styles.templateBadge]}>
-                  <Text style={[styles.badgeText, { color: '#5b4bb7' }]}>
+                  <Text style={[styles.badgeText, { color: '#0B3A5B' }]}>
                     Template
                   </Text>
                 </View>
@@ -187,13 +184,13 @@ export default function QuoteCard({
               )}
               {dueToday ? (
                 <View style={[styles.badge, styles.dueBadge]}>
-                  <Text style={[styles.badgeText, { color: '#b35b00' }]}>
+                  <Text style={[styles.badgeText, { color: '#9A4E00' }]}>
                     Due today
                   </Text>
                 </View>
               ) : needsFollowUp ? (
                 <View style={[styles.badge, styles.overdueBadge]}>
-                  <Text style={[styles.badgeText, { color: '#d11a2a' }]}>
+                  <Text style={[styles.badgeText, { color: danger }]}>
                     Follow up
                   </Text>
                 </View>
@@ -201,15 +198,17 @@ export default function QuoteCard({
             </View>
           </View>
           <View style={styles.bottomRow} lightColor="transparent" darkColor="transparent">
-            <Text style={styles.meta}>
+            <Text style={[styles.meta, { color: muted }]}>
               {quoteRef ? `${quoteRef} · ` : ''}
               {quote.followUpDate && !quote.isTemplate
                 ? `Follow-up ${quote.followUpDate}`
                 : formatQuoteDate(quote.createdAt)}
             </Text>
-            <Text style={styles.total}>{formatQuoteTotal(quote.total)}</Text>
+            <Text style={[styles.total, { color: navy }]}>
+              {formatQuoteTotal(quote.total)}
+            </Text>
           </View>
-        </View>
+        </ListCard>
       </Pressable>
     </Swipeable>
   );
@@ -221,12 +220,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.85,
   },
-  card: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+  cardInner: {
     gap: 10,
   },
   topRow: {
@@ -237,8 +233,9 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
+    fontFamily: fonts.bold,
     fontSize: 17,
-    fontWeight: '700',
+    lineHeight: 22,
   },
   badges: {
     flexDirection: 'row',
@@ -248,22 +245,22 @@ const styles = StyleSheet.create({
     maxWidth: '48%',
   },
   badge: {
-    borderRadius: 999,
+    borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   templateBadge: {
-    backgroundColor: 'rgba(91,75,183,0.16)',
+    backgroundColor: 'rgba(11,58,91,0.12)',
   },
   dueBadge: {
-    backgroundColor: 'rgba(255,149,0,0.18)',
+    backgroundColor: 'rgba(255,149,0,0.2)',
   },
   overdueBadge: {
     backgroundColor: 'rgba(209,26,42,0.14)',
   },
   badgeText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   bottomRow: {
     flexDirection: 'row',
@@ -272,13 +269,13 @@ const styles = StyleSheet.create({
   },
   meta: {
     flex: 1,
-    fontSize: 14,
-    opacity: 0.6,
+    fontFamily: fonts.regular,
+    fontSize: 13,
     marginRight: 8,
   },
   total: {
+    fontFamily: fonts.semibold,
     fontSize: 16,
-    fontWeight: '600',
   },
   actions: {
     flexDirection: 'row',
@@ -286,7 +283,6 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   duplicateAction: {
-    backgroundColor: '#2f95dc',
     justifyContent: 'center',
     alignItems: 'center',
     borderTopLeftRadius: 12,
@@ -295,7 +291,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   deleteAction: {
-    backgroundColor: '#d11a2a',
     justifyContent: 'center',
     alignItems: 'center',
     borderTopRightRadius: 12,
@@ -305,7 +300,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: '#fff',
-    fontWeight: '700',
+    fontFamily: fonts.bold,
     fontSize: 13,
   },
 });

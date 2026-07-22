@@ -15,9 +15,12 @@ import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-rout
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import FieldLabel from '@/components/FieldLabel';
 import KeyboardForm from '@/components/KeyboardForm';
-import { Text, View, useThemeColor } from '@/components/Themed';
+import ProductPicker from '@/components/ProductPicker';
+import { Text, View, useSurfaceColors } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
+import { fonts } from '@/constants/Typography';
 import {
   createProduct,
   deleteProduct,
@@ -67,17 +70,13 @@ export default function EditProductScreen() {
   const productId = typeof id === 'string' && id.length > 0 ? id : undefined;
   const isEditing = Boolean(productId);
 
-  const tint = useThemeColor({}, 'tint');
-  const textColor = useThemeColor({}, 'text');
-  const background = useThemeColor({}, 'background');
-  const fieldBg = useThemeColor(
-    { light: '#f2f3f5', dark: 'rgba(255,255,255,0.08)' },
-    'background'
-  );
-  const borderColor = useThemeColor(
-    { light: '#dde1e6', dark: 'rgba(255,255,255,0.12)' },
-    'text'
-  );
+  const {
+    tint,
+    text: textColor,
+    background,
+    field: fieldBg,
+    border: borderColor,
+  } = useSurfaceColors();
 
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
@@ -935,10 +934,6 @@ export default function EditProductScreen() {
       </Modal>
     </>
   );
-}
-
-function FieldLabel({ children }: { children: string }) {
-  return <Text style={formStyles.label}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({

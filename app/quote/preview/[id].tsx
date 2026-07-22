@@ -10,9 +10,10 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 
-import { Text, View, useThemeColor } from '@/components/Themed';
+import { PrimaryButton, SecondaryButton } from '@/components/Buttons';
 import LiteratureShareSheet from '@/components/LiteratureShareSheet';
-import { formStyles } from '@/constants/Form';
+import { Text, View, useSurfaceColors } from '@/components/Themed';
+import { fonts } from '@/constants/Typography';
 import { calcQuoteTotals } from '@/lib/calc';
 import { getBusinessSettings } from '@/lib/db';
 import { captureException } from '@/lib/monitoring';
@@ -40,17 +41,14 @@ export default function QuotePreviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const quoteId = typeof id === 'string' ? id : '';
 
-  const tint = useThemeColor({}, 'tint');
-  const textColor = useThemeColor({}, 'text');
-  const background = useThemeColor({}, 'background');
-  const fieldBg = useThemeColor(
-    { light: '#f2f3f5', dark: 'rgba(255,255,255,0.08)' },
-    'background'
-  );
-  const borderColor = useThemeColor(
-    { light: '#dde1e6', dark: 'rgba(255,255,255,0.12)' },
-    'text'
-  );
+  const {
+    tint,
+    text: textColor,
+    background,
+    surface: fieldBg,
+    border: borderColor,
+    navy,
+  } = useSurfaceColors();
 
   const quote = useQuoteStore((s) => s.quote);
   const items = useQuoteStore((s) => s.items);
@@ -232,7 +230,7 @@ export default function QuotePreviewScreen() {
           styles.content,
           { paddingBottom: 160 + insets.bottom },
         ]}>
-        <Text style={styles.docTitle}>
+        <Text style={[styles.docTitle, { color: navy }]}>
           Quote {formatQuoteNumber(quote.quoteNumber) || ''}
         </Text>
         <Text style={styles.meta}>
@@ -310,34 +308,24 @@ export default function QuotePreviewScreen() {
             paddingBottom: Math.max(insets.bottom, 12),
           },
         ]}>
-        <Pressable
-          disabled={!!busy}
+        <SecondaryButton
+          label={busy === 'open' ? 'Opening…' : 'Open PDF preview'}
           onPress={() => {
             void openSystemPreview();
           }}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            { borderColor, backgroundColor: fieldBg },
-            (pressed || busy) && formStyles.pressed,
-          ]}>
-          <Text style={[styles.secondaryText, { color: tint }]}>
-            {busy === 'open' ? 'Opening…' : 'Open PDF preview'}
-          </Text>
-        </Pressable>
-        <Pressable
           disabled={!!busy}
+          style={styles.footerSecondary}
+        />
+        <PrimaryButton
+          label={
+            busy === 'share' || literatureLoading ? 'Preparing…' : 'Share PDF'
+          }
           onPress={() => {
             void runShare();
           }}
-          style={({ pressed }) => [
-            formStyles.primaryButton,
-            { backgroundColor: tint },
-            (pressed || busy) && formStyles.pressed,
-          ]}>
-          <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
-            {busy === 'share' || literatureLoading ? 'Preparing…' : 'Share PDF'}
-          </Text>
-        </Pressable>
+          disabled={!!busy}
+          style={styles.footerPrimary}
+        />
       </View>
 
       <LiteratureShareSheet
@@ -371,10 +359,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   docTitle: {
+    fontFamily: fonts.bold,
     fontSize: 22,
-    fontWeight: '700',
   },
   meta: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     opacity: 0.6,
     marginBottom: 4,
@@ -386,9 +375,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardLabel: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.04,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
     opacity: 0.55,
     marginBottom: 2,
@@ -397,10 +386,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   cardBody: {
+    fontFamily: fonts.regular,
     fontSize: 15,
     lineHeight: 21,
   },
   cardMuted: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     opacity: 0.65,
     lineHeight: 18,
@@ -413,6 +404,7 @@ const styles = StyleSheet.create({
   },
   itemName: {
     flex: 1,
+    fontFamily: fonts.regular,
     fontSize: 14,
   },
   totalRow: {
@@ -424,12 +416,12 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(0,0,0,0.12)',
   },
   totalLabel: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
   },
   totalValue: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
   },
   footer: {
     position: 'absolute',
@@ -441,15 +433,10 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     gap: 10,
   },
-  secondaryButton: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
+  footerSecondary: {
+    marginTop: 0,
   },
-  secondaryText: {
-    fontSize: 16,
-    fontWeight: '600',
+  footerPrimary: {
+    marginTop: 0,
   },
 });

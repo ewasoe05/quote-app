@@ -1,3 +1,9 @@
+import {
+  Outfit_400Regular,
+  Outfit_500Medium,
+  Outfit_600SemiBold,
+  Outfit_700Bold,
+} from '@expo-google-fonts/outfit';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -6,6 +12,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors';
+import { fonts } from '@/constants/Typography';
 import { initializeDatabase, seedDefaultCatalog } from '@/lib/db';
 import { captureException, initMonitoring, wrapRoot } from '@/lib/monitoring';
 import { sweepPdfCache } from '@/lib/pdf';
@@ -26,6 +34,10 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayout() {
   const [loaded, error] = useFonts({
+    Outfit_400Regular,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
   const [dbReady, setDbReady] = useState(false);
@@ -84,11 +96,48 @@ export default wrapRoot(RootLayout);
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const navTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
+  const palette = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
+      <ThemeProvider
+        value={{
+          ...navTheme,
+          colors: {
+            ...navTheme.colors,
+            primary: palette.tint,
+            background: palette.background,
+            card: palette.surface,
+            text: palette.text,
+            border: palette.border,
+          },
+          fonts: {
+            ...navTheme.fonts,
+            regular: {
+              ...navTheme.fonts.regular,
+              fontFamily: fonts.regular,
+            },
+            medium: {
+              ...navTheme.fonts.medium,
+              fontFamily: fonts.medium,
+            },
+            bold: {
+              ...navTheme.fonts.bold,
+              fontFamily: fonts.bold,
+            },
+            heavy: {
+              ...navTheme.fonts.heavy,
+              fontFamily: fonts.bold,
+            },
+          },
+        }}>
+        <Stack
+          screenOptions={{
+            headerTitleStyle: { fontFamily: fonts.semibold },
+            headerBackTitleStyle: { fontFamily: fonts.regular },
+            contentStyle: { backgroundColor: palette.background },
+          }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="quote/[id]"

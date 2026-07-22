@@ -9,8 +9,12 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
+import { PrimaryButton } from '@/components/Buttons';
+import EmptyState from '@/components/EmptyState';
+import FilterChip from '@/components/FilterChip';
 import QuoteCard from '@/components/QuoteCard';
-import { Text, View, useThemeColor } from '@/components/Themed';
+import { Text, View, useSurfaceColors } from '@/components/Themed';
+import { fonts } from '@/constants/Typography';
 import {
   createQuote,
   createQuoteFromTemplate,
@@ -35,16 +39,7 @@ export default function QuotesScreen() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [listFilter, setListFilter] = useState<QuoteListFilter>('all');
-  const tint = useThemeColor({}, 'tint');
-  const background = useThemeColor({}, 'background');
-  const fieldBg = useThemeColor(
-    { light: '#f2f3f5', dark: 'rgba(255,255,255,0.08)' },
-    'background'
-  );
-  const borderColor = useThemeColor(
-    { light: '#dde1e6', dark: 'rgba(255,255,255,0.12)' },
-    'text'
-  );
+  const { tint, background, field, border, navy } = useSurfaceColors();
 
   const loadQuotes = useCallback(async () => {
     try {
@@ -181,58 +176,39 @@ export default function QuotesScreen() {
         {dueTodayCount > 0 ? (
           <Pressable
             onPress={() => setListFilter('due_today')}
-            style={[styles.dueBadge, { backgroundColor: fieldBg, borderColor }]}>
+            style={[
+              styles.dueBadge,
+              { backgroundColor: field, borderColor: border },
+            ]}>
             <Text style={[styles.dueBadgeText, { color: tint }]}>
               {dueTodayCount} due today
             </Text>
           </Pressable>
         ) : (
-          <View />
+          <Text style={[styles.headerHint, { color: navy }]}>Pipeline</Text>
         )}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="New quote"
-          disabled={creating}
-          style={({ pressed }) => [
-            styles.newButton,
-            { backgroundColor: tint },
-            (pressed || creating) && styles.newButtonPressed,
-          ]}
+        <PrimaryButton
+          label={creating ? 'Creating…' : 'New Quote'}
           onPress={() => {
             void handleNewQuote();
-          }}>
-          <Text style={styles.newButtonText} lightColor="#fff" darkColor="#000">
-            {creating ? 'Creating…' : 'New Quote'}
-          </Text>
-        </Pressable>
+          }}
+          disabled={creating}
+          style={styles.newButton}
+        />
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filters}>
-        {QUOTE_LIST_FILTERS.map((filter) => {
-          const selected = listFilter === filter;
-          return (
-            <Pressable
-              key={filter}
-              onPress={() => setListFilter(filter)}
-              style={[
-                styles.filterChip,
-                {
-                  borderColor: selected ? tint : borderColor,
-                  backgroundColor: selected ? tint : fieldBg,
-                },
-              ]}>
-              <Text
-                style={styles.filterChipText}
-                lightColor={selected ? '#fff' : '#111'}
-                darkColor={selected ? '#000' : '#fff'}>
-                {getQuoteListFilterLabel(filter)}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {QUOTE_LIST_FILTERS.map((filter) => (
+          <FilterChip
+            key={filter}
+            label={getQuoteListFilterLabel(filter)}
+            selected={listFilter === filter}
+            onPress={() => setListFilter(filter)}
+          />
+        ))}
       </ScrollView>
 
       {loading ? (
@@ -240,19 +216,20 @@ export default function QuotesScreen() {
           <ActivityIndicator size="large" color={tint} />
         </View>
       ) : isEmpty && listFilter === 'all' ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>No quotes yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Create a draft to start building a customer estimate.
-          </Text>
-        </View>
+        <EmptyState
+          title="No quotes yet"
+          body="Create a draft to start building a customer estimate on the truck."
+          actionLabel={creating ? 'Creating…' : 'New Quote'}
+          actionDisabled={creating}
+          onAction={() => {
+            void handleNewQuote();
+          }}
+        />
       ) : filterEmpty ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>No matching quotes</Text>
-          <Text style={styles.emptySubtitle}>
-            Try another filter, open Templates, or create a new quote.
-          </Text>
-        </View>
+        <EmptyState
+          title="No matching quotes"
+          body="Try another filter, open Templates, or create a new quote."
+        />
       ) : (
         <FlatList
           data={filteredQuotes}
@@ -295,29 +272,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  headerHint: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+  },
   dueBadge: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 999,
+    borderRadius: 10,
     paddingHorizontal: 12,
     minHeight: 36,
     justifyContent: 'center',
   },
   dueBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   newButton: {
-    borderRadius: 10,
-    paddingHorizontal: 16,
+    marginTop: 0,
     minHeight: 44,
-    justifyContent: 'center',
-  },
-  newButtonPressed: {
-    opacity: 0.85,
-  },
-  newButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   filters: {
     paddingHorizontal: 16,
@@ -325,34 +299,11 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
-  filterChip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    opacity: 0.65,
   },
   listContent: {
     paddingTop: 8,
