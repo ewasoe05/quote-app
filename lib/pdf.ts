@@ -1,4 +1,4 @@
-import { File } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -31,6 +31,39 @@ async function logoToDataUri(logoUri: string | null): Promise<string | null> {
   }
 }
 
+/**
+ * Print.printToFileAsync writes a PDF into the app cache on every share and
+ * never cleans up after itself, so the directory grows without bound. The OS
+ * may reclaim the cache, but not predictably — so we sweep it ourselves.
+ *
+ * `keepUri` protects the file we just handed to the share sheet, since iOS
+ * reads it asynchronously after shareAsync resolves.
+ */
+export function sweepPdfCache(keepUri?: string): void {
+  // expo-print writes into a "Print" subdirectory of the cache on iOS and
+  // Android; older builds wrote to the cache root, so check both.
+  const candidates = [new Directory(Paths.cache, 'Print'), new Directory(Paths.cache)];
+
+  for (const directory of candidates) {
+    try {
+      if (!directory.exists) continue;
+
+      for (const entry of directory.list()) {
+        if (entry instanceof Directory) continue;
+        if (!entry.name.toLowerCase().endsWith('.pdf')) continue;
+        if (keepUri && entry.uri === keepUri) continue;
+        try {
+          entry.delete();
+        } catch {
+          // A file still held open by the share sheet — leave it for next sweep.
+        }
+      }
+    } catch {
+      // Unreadable cache directory is not worth failing a share over.
+    }
+  }
+}
+
 export async function createQuotePdfFile(
   input: QuotePdfInput
 ): Promise<{ uri: string; html: string }> {
@@ -40,6 +73,10 @@ export async function createQuotePdfFile(
     html,
     base64: false,
   });
+
+  // Drop every earlier PDF now that a fresh one exists.
+  sweepPdfCache(file.uri);
+
   return { uri: file.uri, html };
 }
 

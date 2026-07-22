@@ -18,6 +18,7 @@ import {
   getBusinessSettings,
   getQuotesWithTotals,
 } from '@/lib/db';
+import { captureException } from '@/lib/monitoring';
 import type { QuoteListItem } from '@/lib/quotes';
 import {
   QUOTE_STATUSES,
@@ -92,6 +93,7 @@ export default function QuotesScreen() {
       });
       router.push({ pathname: '/quote/[id]', params: { id: quote.id } });
     } catch (err) {
+      captureException(err, { action: 'create-quote' });
       Alert.alert(
         'Could not create quote',
         err instanceof Error ? err.message : 'Something went wrong.'
@@ -108,6 +110,7 @@ export default function QuotesScreen() {
         await loadQuotes();
         router.push({ pathname: '/quote/[id]', params: { id: copy.id } });
       } catch (err) {
+        captureException(err, { action: 'duplicate-quote', quoteId: quote.id });
         Alert.alert(
           'Duplicate failed',
           err instanceof Error ? err.message : 'Could not duplicate quote.'
@@ -122,6 +125,7 @@ export default function QuotesScreen() {
       await deleteQuote(quote.id);
       setQuotes((current) => current.filter((item) => item.id !== quote.id));
     } catch (err) {
+      captureException(err, { action: 'delete-quote', quoteId: quote.id });
       Alert.alert(
         'Delete failed',
         err instanceof Error ? err.message : 'Could not delete quote.'

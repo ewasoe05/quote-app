@@ -5,6 +5,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { Text, View } from '@/components/Themed';
 import {
   formatQuoteDate,
+  formatQuoteNumber,
   formatQuoteTotal,
   getQuoteStatusLabel,
   type QuoteListItem,
@@ -37,6 +38,7 @@ export default function QuoteCard({
   const swipeableRef = useRef<Swipeable>(null);
   const statusColors = STATUS_COLORS[quote.status] ?? STATUS_COLORS.draft;
   const customerLabel = quote.customerName.trim() || 'Untitled quote';
+  const quoteRef = formatQuoteNumber(quote.quoteNumber);
 
   const confirmDelete = () => {
     swipeableRef.current?.close();
@@ -129,7 +131,10 @@ export default function QuoteCard({
             </View>
           </View>
           <View style={styles.bottomRow} lightColor="transparent" darkColor="transparent">
-            <Text style={styles.meta}>{formatQuoteDate(quote.createdAt)}</Text>
+            <Text style={styles.meta}>
+              {quoteRef ? `${quoteRef} · ` : ''}
+              {formatQuoteDate(quote.createdAt)}
+            </Text>
             <Text style={styles.total}>{formatQuoteTotal(quote.total)}</Text>
           </View>
         </View>

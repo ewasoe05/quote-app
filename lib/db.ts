@@ -39,6 +39,7 @@ type ProductRow = {
 
 type QuoteRow = {
   id: string;
+  quote_number: number;
   customer_name: string;
   phone: string;
   email: string;
@@ -75,6 +76,7 @@ function mapProduct(row: ProductRow): Product {
 function mapQuote(row: QuoteRow): Quote {
   return {
     id: row.id,
+    quoteNumber: row.quote_number,
     customerName: row.customer_name,
     phone: row.phone,
     email: row.email,
@@ -125,6 +127,7 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
 
     CREATE TABLE IF NOT EXISTS quotes (
       id TEXT PRIMARY KEY NOT NULL,
+      quote_number INTEGER NOT NULL DEFAULT 0,
       customer_name TEXT NOT NULL DEFAULT '',
       phone TEXT NOT NULL DEFAULT '',
       email TEXT NOT NULL DEFAULT '',
@@ -154,17 +157,101 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     );
   `);
 
-  // Migrate older DBs that predate discount_type.
   const quoteColumns = await db.getAllAsync<{ name: string }>(
     'PRAGMA table_info(quotes)'
   );
+
+  // Migrate older DBs that predate discount_type.
   if (!quoteColumns.some((column) => column.name === 'discount_type')) {
     await db.execAsync(
       `ALTER TABLE quotes ADD COLUMN discount_type TEXT NOT NULL DEFAULT 'flat'`
     );
   }
 
+  // Migrate older DBs that predate quote_number.
+  if (!quoteColumns.some((column) => column.name === 'quote_number')) {
+    await db.execAsync(
+      'ALTER TABLE quotes ADD COLUMN quote_number INTEGER NOT NULL DEFAULT 0'
+    );
+  }
+
+  await backfillQuoteNumbers(db);
+
   return db;
+}
+
+// --- Quote numbering ---
+
+export const QUOTE_NUMBER_SEQ_KEY = 'quote_number_seq';
+
+/** Quotes start here so a business's first customer document isn't "#1". */
+export const FIRST_QUOTE_NUMBER = 1001;
+
+/**
+ * Assign numbers to any quote still sitting at the 0 default (rows written
+ * before this column existed), oldest first, then park the sequence above the
+ * highest number in use. Idempotent — a no-op once every row is numbered.
+ */
+async function backfillQuoteNumbers(
+  db: SQLite.SQLiteDatabase
+): Promise<void> {
+  const unnumbered = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM quotes WHERE quote_number IS NULL OR quote_number < ${FIRST_QUOTE_NUMBER}
+     ORDER BY created_at ASC, id ASC`
+  );
+
+  const highest = await db.getFirstAsync<{ value: number | null }>(
+    'SELECT MAX(quote_number) AS value FROM quotes'
+  );
+  let next = Math.max(highest?.value ?? 0, FIRST_QUOTE_NUMBER - 1) + 1;
+
+  if (unnumbered.length > 0) {
+    await db.withTransactionAsync(async () => {
+      for (const row of unnumbered) {
+        await db.runAsync(
+          'UPDATE quotes SET quote_number = ? WHERE id = ?',
+          next,
+          row.id
+        );
+        next += 1;
+      }
+    });
+  }
+
+  // Keep the sequence ahead of every number already handed out, so a deleted
+  // quote never has its number reissued to a different customer.
+  const stored = Number(await getSetting(QUOTE_NUMBER_SEQ_KEY));
+  if (!Number.isFinite(stored) || stored < next) {
+    await setSetting(QUOTE_NUMBER_SEQ_KEY, String(next));
+  }
+}
+
+/**
+ * Read-and-bump the sequence. Must be called inside a transaction so two
+ * concurrent creates can't be handed the same number.
+ */
+async function allocateQuoteNumber(
+  db: SQLite.SQLiteDatabase
+): Promise<number> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM settings WHERE key = ?',
+    QUOTE_NUMBER_SEQ_KEY
+  );
+
+  const stored = Number(row?.value);
+  const next =
+    Number.isFinite(stored) && stored >= FIRST_QUOTE_NUMBER
+      ? stored
+      : FIRST_QUOTE_NUMBER;
+
+  await db.runAsync(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    QUOTE_NUMBER_SEQ_KEY,
+    String(next + 1)
+  );
+
+  return next;
 }
 
 export async function getSetting(key: string): Promise<string | null> {
@@ -237,13 +324,9 @@ export async function seedDefaultCatalog(): Promise<number> {
       await createProduct(product);
       inserted += 1;
     }
-    console.log(`[db] seeded ${inserted} default catalog products`);
-  } else {
-    // Upgrade path: products already present from an earlier seed — just set the flag.
-    console.log(
-      `[db] catalog seed flag set; skipped insert (${existing.length} products already present)`
-    );
   }
+  // else: upgrade path — products already present from an earlier seed, so
+  // just set the flag below without re-inserting.
 
   await setSetting(CATALOG_SEEDED_KEY, '1');
   return inserted;
@@ -335,8 +418,38 @@ export async function deleteProduct(id: string): Promise<boolean> {
 
 export async function createQuote(input: NewQuote): Promise<Quote> {
   const db = await getDatabase();
-  const quote: Quote = {
-    id: createId(),
+  const id = createId();
+  const createdAt = input.createdAt ?? new Date().toISOString();
+  let quoteNumber = FIRST_QUOTE_NUMBER;
+
+  // Allocating the number and inserting the row share one transaction: if the
+  // insert fails the sequence rolls back with it, so no number is burned.
+  await db.withTransactionAsync(async () => {
+    quoteNumber = await allocateQuoteNumber(db);
+
+    await db.runAsync(
+      `INSERT INTO quotes (
+        id, quote_number, customer_name, phone, email, address, status,
+        discount, discount_type, tax_rate, notes, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      quoteNumber,
+      input.customerName,
+      input.phone,
+      input.email,
+      input.address,
+      input.status,
+      input.discount,
+      input.discountType ?? 'flat',
+      input.taxRate,
+      input.notes,
+      createdAt
+    );
+  });
+
+  return {
+    id,
+    quoteNumber,
     customerName: input.customerName,
     phone: input.phone,
     email: input.email,
@@ -346,27 +459,8 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
     discountType: input.discountType ?? 'flat',
     taxRate: input.taxRate,
     notes: input.notes,
-    createdAt: input.createdAt ?? new Date().toISOString(),
+    createdAt,
   };
-
-  await db.runAsync(
-    `INSERT INTO quotes (
-      id, customer_name, phone, email, address, status, discount, discount_type, tax_rate, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    quote.id,
-    quote.customerName,
-    quote.phone,
-    quote.email,
-    quote.address,
-    quote.status,
-    quote.discount,
-    quote.discountType,
-    quote.taxRate,
-    quote.notes,
-    quote.createdAt
-  );
-
-  return quote;
 }
 
 export async function getQuoteById(id: string): Promise<Quote | null> {
@@ -381,7 +475,7 @@ export async function getQuoteById(id: string): Promise<Quote | null> {
 export async function getAllQuotes(): Promise<Quote[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<QuoteRow>(
-    'SELECT * FROM quotes ORDER BY created_at DESC'
+    'SELECT * FROM quotes ORDER BY created_at DESC, quote_number DESC'
   );
   return rows.map(mapQuote);
 }

@@ -7,6 +7,11 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { initializeDatabase, seedDefaultCatalog } from '@/lib/db';
+import { captureException, initMonitoring } from '@/lib/monitoring';
+import { sweepPdfCache } from '@/lib/pdf';
+
+// Before anything else, so startup crashes are captured too.
+initMonitoring();
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -27,11 +32,17 @@ export default function RootLayout() {
   const [dbError, setDbError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (error) throw error;
+    if (error) {
+      captureException(error, { stage: 'font-load' });
+      throw error;
+    }
   }, [error]);
 
   useEffect(() => {
-    if (dbError) throw dbError;
+    if (dbError) {
+      captureException(dbError, { stage: 'db-init' });
+      throw dbError;
+    }
   }, [dbError]);
 
   useEffect(() => {
@@ -41,6 +52,8 @@ export default function RootLayout() {
       try {
         await initializeDatabase();
         await seedDefaultCatalog();
+        // Clear PDFs left in the cache by previous sessions.
+        sweepPdfCache();
         if (!cancelled) setDbReady(true);
       } catch (err) {
         if (!cancelled) {

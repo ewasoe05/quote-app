@@ -3,6 +3,9 @@
     "name": "Quote App",
     "slug": "quote-app",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "quoteapp",
@@ -18,7 +21,8 @@
       "bundleIdentifier": "com.ewasoe05.quoteapp",
       "buildNumber": "1",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow Quote App to access your photos so you can add a company logo to quotes."
+        "NSPhotoLibraryUsageDescription": "Allow Quote App to access your photos so you can add a company logo to quotes.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -62,6 +66,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fe23cd70-7716-4b20-bf34-69e928a68fb2"
+      }
     }
   }
 }

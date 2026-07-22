@@ -66,13 +66,63 @@ npx eas submit --platform ios --profile production
 - **APK:** `preview` profile (`buildType: apk`) — install on devices without Play.
 - **AAB:** `production` profile (`buildType: app-bundle`) — upload to Play Console (internal track is preconfigured under `submit.production.android`).
 
+## Pending setup
+
+Two integrations are scaffolded in the repo but not yet active. Both need
+credentials that can't live in source control.
+
+### Over-the-air updates (EAS Update)
+
+`app.json` sets `runtimeVersion` to the `fingerprint` policy, which derives
+compatibility automatically — including across SDK upgrades and native changes.
+`expo-updates` is listed as a dependency but still needs installing and linking:
+
+```bash
+npx expo install expo-updates
+npx eas update:configure   # writes updates.url into app.json
+```
+
+After that, ship a JS-only fix without an App Store review:
+
+```bash
+eas update --branch production --message "Fix totals rounding"
+```
+
+Native changes (new modules, permission strings, SDK bumps) still require a new
+binary — the fingerprint policy will change, and old binaries correctly stop
+accepting the update.
+
+### Crash reporting (Sentry)
+
+`lib/monitoring.ts` is the seam: `initMonitoring()` runs at app startup and
+`captureException()` is already called from the DB init path, PDF sharing, and
+every quote create/duplicate/delete handler. All of it no-ops until a DSN is
+present, so the app builds and runs unchanged today.
+
+To turn it on:
+
+```bash
+npx @sentry/wizard@latest -i reactNative
+```
+
+Then set `EXPO_PUBLIC_SENTRY_DSN` in `.env`, uncomment the marked blocks in
+`lib/monitoring.ts`, and wrap the root layout export with `Sentry.wrap()`.
+`SENTRY_AUTH_TOKEN` (used for source map upload) must be set as a **sensitive**
+EAS environment variable — never committed.
+
+Note that `sendDefaultPii` is deliberately off in the scaffold: quotes contain
+customer names, addresses, and phone numbers, and none of that should leave the
+device attached to a crash report.
+
 ## Field / offline checklist
 
 On a physical device with airplane mode on:
 
 1. Open app (no crash; catalog + quotes load from SQLite).
 2. Create or edit a product.
-3. Create a quote → add line items → adjust discount/tax.
+3. Create a quote → add line items → adjust discount/tax → add notes.
+4. Confirm the quote number (`#1001`+) shows on the list card, the builder
+   screen, and the PDF header, and that it never repeats after deleting a quote.
 4. Share PDF — generation is local; the share sheet may still open for Files/Messages. If sharing is unavailable, the alert explains that catalog/quotes remain usable offline.
 
 ## Branding assets

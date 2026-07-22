@@ -17,6 +17,7 @@ const business: BusinessSettings = {
 
 const quote: Quote = {
   id: 'q1',
+  quoteNumber: 1042,
   customerName: 'Jane Doe',
   phone: '555-0199',
   email: 'jane@example.com',
@@ -59,6 +60,19 @@ assert.match(html, /1-year parts warranty/);
 assert.match(html, /Discount \(10%\)/);
 assert.match(html, /page-break-inside:\s*avoid/);
 assert.match(html, /thead\s*\{\s*display:\s*table-header-group/);
+
+// Quote number appears on the document so customers can reference it.
+assert.match(html, /Quote #1042/);
+
+// Notes render only when present, and are escaped like every other field.
+assert.doesNotMatch(html, /class="section notes"/);
+const withNotes = buildQuoteHtml({
+  quote: { ...quote, notes: 'Crawlspace access\n<b>tight fit</b>' },
+  items,
+  business,
+});
+assert.match(withNotes, /class="section notes"/);
+assert.match(withNotes, /Crawlspace access<br\/>&lt;b&gt;tight fit&lt;\/b&gt;/);
 
 // Escapes HTML in user content
 const sneaky = buildQuoteHtml({

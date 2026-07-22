@@ -1,6 +1,6 @@
 import { calcQuoteTotals } from './calc';
 import { formatCurrency } from './products';
-import { formatQuoteDate } from './quotes';
+import { formatQuoteDate, formatQuoteNumber } from './quotes';
 import type { BusinessSettings, Quote, QuoteItem } from './types';
 
 export type QuotePdfInput = {
@@ -56,6 +56,7 @@ export function buildQuoteHtml(
   const businessName = business.businessName.trim() || 'Quote';
   const customerName = quote.customerName.trim() || 'Customer';
   const quoteDate = formatQuoteDate(quote.createdAt);
+  const quoteRef = formatQuoteNumber(quote.quoteNumber);
   const discountLabel =
     quote.discountType === 'percent'
       ? `Discount (${quote.discount}%)`
@@ -87,6 +88,12 @@ export function buildQuoteHtml(
   const customerMeta = customerLines(quote)
     .map((line) => `<div>${nl2br(line)}</div>`)
     .join('');
+
+  const notesHtml = quote.notes.trim()
+    ? `<div class="section notes"><div class="section-title">Notes</div><div>${nl2br(
+        quote.notes.trim()
+      )}</div></div>`
+    : '';
 
   const footerHtml = business.quoteFooter.trim()
     ? `<div class="footer"><div class="footer-title">Terms</div><div>${nl2br(
@@ -209,6 +216,12 @@ export function buildQuoteHtml(
       font-size: 15px;
       font-weight: 700;
     }
+    .notes {
+      page-break-inside: avoid;
+    }
+    .notes .section-title {
+      margin-bottom: 4px;
+    }
     .footer {
       margin-top: 28px;
       padding-top: 14px;
@@ -237,7 +250,7 @@ export function buildQuoteHtml(
       </div>
     </div>
     <div class="quote-label">
-      <div class="eyebrow">Quote</div>
+      <div class="eyebrow">Quote${quoteRef ? ` ${escapeHtml(quoteRef)}` : ''}</div>
       <div class="date">${escapeHtml(quoteDate)}</div>
     </div>
   </div>
@@ -279,6 +292,7 @@ export function buildQuoteHtml(
     </div>
   </div>
 
+  ${notesHtml}
   ${footerHtml}
 </body>
 </html>`;

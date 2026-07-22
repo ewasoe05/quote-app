@@ -37,3 +37,9 @@ export function formatQuoteDate(iso: string): string {
 export function formatQuoteTotal(total: number): string {
   return formatCurrency(total);
 }
+
+/** Human-readable quote reference, e.g. "#1042". */
+export function formatQuoteNumber(quoteNumber: number): string {
+  if (!Number.isFinite(quoteNumber) || quoteNumber <= 0) return '';
+  return `#${Math.trunc(quoteNumber)}`;
+}

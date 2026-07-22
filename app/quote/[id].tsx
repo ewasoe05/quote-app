@@ -18,8 +18,10 @@ import { Text, View, useThemeColor } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
 import { calcQuoteTotals } from '@/lib/calc';
 import { getBusinessSettings } from '@/lib/db';
+import { captureException } from '@/lib/monitoring';
 import { shareQuotePdf } from '@/lib/pdf';
 import { formatCurrency } from '@/lib/products';
+import { formatQuoteDate, formatQuoteNumber } from '@/lib/quotes';
 import type { DiscountType, Product, QuoteStatus } from '@/lib/types';
 import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from '@/lib/types';
 import { useQuoteStore } from '@/store/quoteStore';
@@ -141,6 +143,7 @@ export default function QuoteBuilderScreen() {
       updateQuoteFields({ status: 'sent' });
       await flush();
     } catch (err) {
+      captureException(err, { action: 'share-pdf', quoteId: quote.id });
       const message =
         err instanceof Error ? err.message : 'Something went wrong.';
       Alert.alert(
@@ -196,6 +199,7 @@ export default function QuoteBuilderScreen() {
   }
 
   const title = quote.customerName.trim() || 'New Quote';
+  const quoteRef = formatQuoteNumber(quote.quoteNumber);
 
   return (
     <KeyboardForm scroll={false} style={{ backgroundColor: background }}>
@@ -214,6 +218,11 @@ export default function QuoteBuilderScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: 220 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
+        <Text style={styles.quoteRef}>
+          {quoteRef ? `Quote ${quoteRef} · ` : ''}
+          {formatQuoteDate(quote.createdAt)}
+        </Text>
+
         <Text style={styles.sectionTitle}>Status</Text>
         <View style={styles.statusRow} lightColor="transparent" darkColor="transparent">
           {QUOTE_STATUSES.map((status) => {
@@ -421,6 +430,29 @@ export default function QuoteBuilderScreen() {
             ]}
           />
         </View>
+
+        <View style={styles.notesBlock} lightColor="transparent" darkColor="transparent">
+          <Text style={styles.sectionTitle}>Notes</Text>
+          <Text style={styles.notesHint}>
+            Shown on the quote PDF, above your terms.
+          </Text>
+          <TextInput
+            value={quote.notes}
+            onChangeText={(notes) => updateQuoteFields({ notes })}
+            onBlur={() => {
+              void flush();
+            }}
+            placeholder="Scope, access notes, timeline, exclusions…"
+            placeholderTextColor="#999"
+            multiline
+            textAlignVertical="top"
+            style={[
+              formStyles.input,
+              styles.notesInput,
+              { color: textColor, backgroundColor: fieldBg, borderColor },
+            ]}
+          />
+        </View>
       </ScrollView>
 
       <View
@@ -591,6 +623,25 @@ const styles = StyleSheet.create({
   },
   discountInput: {
     flex: 1,
+  },
+  quoteRef: {
+    fontSize: 13,
+    opacity: 0.55,
+    marginBottom: 4,
+  },
+  notesBlock: {
+    marginTop: 12,
+    gap: 4,
+  },
+  notesHint: {
+    fontSize: 13,
+    opacity: 0.55,
+    marginBottom: 4,
+  },
+  notesInput: {
+    minHeight: 110,
+    paddingTop: 14,
+    textAlignVertical: 'top',
   },
   stickyBar: {
     position: 'absolute',

@@ -51,6 +51,8 @@ export interface Product {
 
 export interface Quote {
   id: string;
+  /** Sequential, human-readable identifier shown on the PDF. Never reused. */
+  quoteNumber: number;
   customerName: string;
   phone: string;
   email: string;
@@ -75,10 +77,13 @@ export interface QuoteItem {
 export type NewProduct = Omit<Product, 'id'>;
 export type UpdateProduct = Partial<NewProduct>;
 
-export type NewQuote = Omit<Quote, 'id' | 'createdAt'> & {
+/** quoteNumber is allocated by the database, never supplied by callers. */
+export type NewQuote = Omit<Quote, 'id' | 'createdAt' | 'quoteNumber'> & {
   createdAt?: string;
 };
-export type UpdateQuote = Partial<Omit<Quote, 'id' | 'createdAt'>>;
+export type UpdateQuote = Partial<
+  Omit<Quote, 'id' | 'createdAt' | 'quoteNumber'>
+>;
 
 export type NewQuoteItem = Omit<QuoteItem, 'id'>;
 export type UpdateQuoteItem = Partial<Omit<QuoteItem, 'id' | 'quoteId'>>;
