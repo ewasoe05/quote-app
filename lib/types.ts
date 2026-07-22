@@ -76,6 +76,11 @@ export interface Quote {
   discountType: DiscountType;
   taxRate: number;
   notes: string;
+  /** ISO date (yyyy-mm-dd) when the quote expires; null if unset. */
+  validUntil: string | null;
+  deposit: number;
+  depositType: DiscountType;
+  paymentTerms: string;
   createdAt: string;
 }
 
@@ -115,9 +120,18 @@ export type BusinessSettings = {
   address: string;
   licenseNumber: string;
   defaultTaxRate: number;
+  /** Days from create date used to seed quote.validUntil (0 = leave blank). */
+  defaultValidDays: number;
+  defaultDeposit: number;
+  defaultDepositType: DiscountType;
+  defaultPaymentTerms: string;
   quoteFooter: string;
+  /** Hex accent used on quote PDFs, e.g. #2b6cb0. */
+  accentColor: string;
   logoUri: string | null;
 };
+
+export const DEFAULT_ACCENT_COLOR = '#2b6cb0';
 
 export const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
   businessName: '',
@@ -127,6 +141,11 @@ export const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
   address: '',
   licenseNumber: '',
   defaultTaxRate: 0,
+  defaultValidDays: 7,
+  defaultDeposit: 0,
+  defaultDepositType: 'percent',
+  defaultPaymentTerms: '',
   quoteFooter: '',
+  accentColor: DEFAULT_ACCENT_COLOR,
   logoUri: null,
 };

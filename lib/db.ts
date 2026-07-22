@@ -53,6 +53,10 @@ type QuoteRow = {
   discount_type: string;
   tax_rate: number;
   notes: string;
+  valid_until?: string | null;
+  deposit?: number | null;
+  deposit_type?: string | null;
+  payment_terms?: string | null;
   created_at: string;
 };
 
@@ -116,6 +120,10 @@ function mapQuote(row: QuoteRow): Quote {
     discountType: (row.discount_type === 'percent' ? 'percent' : 'flat') as DiscountType,
     taxRate: row.tax_rate,
     notes: row.notes,
+    validUntil: row.valid_until?.trim() ? row.valid_until.trim() : null,
+    deposit: Number(row.deposit) || 0,
+    depositType: (row.deposit_type === 'percent' ? 'percent' : 'flat') as DiscountType,
+    paymentTerms: row.payment_terms ?? '',
     createdAt: row.created_at,
   };
 }
@@ -169,6 +177,10 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       discount_type TEXT NOT NULL DEFAULT 'flat',
       tax_rate REAL NOT NULL DEFAULT 0,
       notes TEXT NOT NULL DEFAULT '',
+      valid_until TEXT,
+      deposit REAL NOT NULL DEFAULT 0,
+      deposit_type TEXT NOT NULL DEFAULT 'percent',
+      payment_terms TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
 
@@ -205,6 +217,25 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!quoteColumns.some((column) => column.name === 'quote_number')) {
     await db.execAsync(
       'ALTER TABLE quotes ADD COLUMN quote_number INTEGER NOT NULL DEFAULT 0'
+    );
+  }
+
+  if (!quoteColumns.some((column) => column.name === 'valid_until')) {
+    await db.execAsync('ALTER TABLE quotes ADD COLUMN valid_until TEXT');
+  }
+  if (!quoteColumns.some((column) => column.name === 'deposit')) {
+    await db.execAsync(
+      'ALTER TABLE quotes ADD COLUMN deposit REAL NOT NULL DEFAULT 0'
+    );
+  }
+  if (!quoteColumns.some((column) => column.name === 'deposit_type')) {
+    await db.execAsync(
+      `ALTER TABLE quotes ADD COLUMN deposit_type TEXT NOT NULL DEFAULT 'percent'`
+    );
+  }
+  if (!quoteColumns.some((column) => column.name === 'payment_terms')) {
+    await db.execAsync(
+      `ALTER TABLE quotes ADD COLUMN payment_terms TEXT NOT NULL DEFAULT ''`
     );
   }
 
@@ -342,6 +373,16 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
       ...DEFAULT_BUSINESS_SETTINGS,
       ...parsed,
       defaultTaxRate: Number(parsed.defaultTaxRate) || 0,
+      defaultValidDays: Math.max(0, Number(parsed.defaultValidDays) || 0),
+      defaultDeposit: Math.max(0, Number(parsed.defaultDeposit) || 0),
+      defaultDepositType:
+        parsed.defaultDepositType === 'flat' ? 'flat' : 'percent',
+      defaultPaymentTerms: parsed.defaultPaymentTerms ?? '',
+      accentColor:
+        typeof parsed.accentColor === 'string' &&
+        /^#([0-9a-fA-F]{6})$/.test(parsed.accentColor.trim())
+          ? parsed.accentColor.trim()
+          : DEFAULT_BUSINESS_SETTINGS.accentColor,
       logoUri: parsed.logoUri ?? null,
     };
   } catch {
@@ -356,6 +397,16 @@ export async function saveBusinessSettings(
     ...DEFAULT_BUSINESS_SETTINGS,
     ...settings,
     defaultTaxRate: Math.max(0, Number(settings.defaultTaxRate) || 0),
+    defaultValidDays: Math.max(0, Math.floor(Number(settings.defaultValidDays) || 0)),
+    defaultDeposit: Math.max(0, Number(settings.defaultDeposit) || 0),
+    defaultDepositType:
+      settings.defaultDepositType === 'flat' ? 'flat' : 'percent',
+    defaultPaymentTerms: settings.defaultPaymentTerms?.trim() ?? '',
+    accentColor:
+      typeof settings.accentColor === 'string' &&
+      /^#([0-9a-fA-F]{6})$/.test(settings.accentColor.trim())
+        ? settings.accentColor.trim()
+        : DEFAULT_BUSINESS_SETTINGS.accentColor,
     logoUri: settings.logoUri || null,
   };
   await setSetting(BUSINESS_SETTINGS_KEY, JSON.stringify(payload));
@@ -493,8 +544,9 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
     await db.runAsync(
       `INSERT INTO quotes (
         id, quote_number, customer_name, phone, email, address, status,
-        discount, discount_type, tax_rate, notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        discount, discount_type, tax_rate, notes,
+        valid_until, deposit, deposit_type, payment_terms, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       quoteNumber,
       input.customerName,
@@ -506,6 +558,10 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
       input.discountType ?? 'flat',
       input.taxRate,
       input.notes,
+      input.validUntil ?? null,
+      input.deposit ?? 0,
+      input.depositType ?? 'percent',
+      input.paymentTerms ?? '',
       createdAt
     );
   });
@@ -522,6 +578,10 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
     discountType: input.discountType ?? 'flat',
     taxRate: input.taxRate,
     notes: input.notes,
+    validUntil: input.validUntil ?? null,
+    deposit: input.deposit ?? 0,
+    depositType: input.depositType ?? 'percent',
+    paymentTerms: input.paymentTerms ?? '',
     createdAt,
   };
 }
@@ -559,7 +619,8 @@ export async function updateQuote(
   await db.runAsync(
     `UPDATE quotes
      SET customer_name = ?, phone = ?, email = ?, address = ?, status = ?,
-         discount = ?, discount_type = ?, tax_rate = ?, notes = ?
+         discount = ?, discount_type = ?, tax_rate = ?, notes = ?,
+         valid_until = ?, deposit = ?, deposit_type = ?, payment_terms = ?
      WHERE id = ?`,
     next.customerName,
     next.phone,
@@ -570,6 +631,10 @@ export async function updateQuote(
     next.discountType,
     next.taxRate,
     next.notes,
+    next.validUntil,
+    next.deposit,
+    next.depositType,
+    next.paymentTerms,
     id
   );
 
@@ -619,6 +684,10 @@ export async function duplicateQuote(sourceId: string): Promise<Quote> {
     discountType: source.discountType,
     taxRate: source.taxRate,
     notes: source.notes,
+    validUntil: source.validUntil,
+    deposit: source.deposit,
+    depositType: source.depositType,
+    paymentTerms: source.paymentTerms,
   });
 
   for (const item of items) {

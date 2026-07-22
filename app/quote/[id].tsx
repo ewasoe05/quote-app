@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,6 +22,11 @@ import { getBusinessSettings } from '@/lib/db';
 import { captureException } from '@/lib/monitoring';
 import { shareQuotePdf } from '@/lib/pdf';
 import { formatCurrency } from '@/lib/products';
+import {
+  mapsUrlForAddress,
+  normalizeValidUntil,
+  telUrlForPhone,
+} from '@/lib/quoteDocument';
 import { formatQuoteDate, formatQuoteNumber } from '@/lib/quotes';
 import type { DiscountType, Product, QuoteStatus } from '@/lib/types';
 import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from '@/lib/types';
@@ -66,6 +72,8 @@ export default function QuoteBuilderScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [discountText, setDiscountText] = useState('0');
   const [taxText, setTaxText] = useState('0');
+  const [depositText, setDepositText] = useState('0');
+  const [validUntilText, setValidUntilText] = useState('');
   const [sharing, setSharing] = useState(false);
 
   useFocusEffect(
@@ -77,10 +85,15 @@ export default function QuoteBuilderScreen() {
       void loadQuote(quoteId);
       return () => {
         void flush();
-        reset();
       };
-    }, [flush, loadQuote, quoteId, reset, router])
+    }, [flush, loadQuote, quoteId, router])
   );
+
+  useEffect(() => {
+    return () => {
+      reset();
+    };
+  }, [reset]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -101,7 +114,9 @@ export default function QuoteBuilderScreen() {
     if (!quote) return;
     setDiscountText(String(quote.discount ?? 0));
     setTaxText(String(quote.taxRate ?? 0));
-  }, [quote?.id, quote?.discount, quote?.taxRate]);
+    setDepositText(String(quote.deposit ?? 0));
+    setValidUntilText(quote.validUntil ?? '');
+  }, [quote?.id, quote?.discount, quote?.taxRate, quote?.deposit, quote?.validUntil]);
 
   const totals = useMemo(() => {
     if (!quote) {
@@ -127,6 +142,32 @@ export default function QuoteBuilderScreen() {
     },
     [addProduct]
   );
+
+  const openPreview = useCallback(async () => {
+    if (!quote) return;
+    // Commit local text fields that may not have blurred yet.
+    const nextValid = normalizeValidUntil(validUntilText);
+    const parsedDeposit = Number(depositText.trim());
+    const deposit =
+      Number.isFinite(parsedDeposit) && parsedDeposit >= 0
+        ? Math.round(parsedDeposit * 100) / 100
+        : quote.deposit ?? 0;
+    updateQuoteFields({
+      validUntil: nextValid,
+      deposit,
+    });
+    setValidUntilText(nextValid ?? '');
+    setDepositText(String(deposit));
+    await flush();
+    router.push({ pathname: '/quote/preview/[id]', params: { id: quote.id } });
+  }, [
+    depositText,
+    flush,
+    quote,
+    router,
+    updateQuoteFields,
+    validUntilText,
+  ]);
 
   const handleSharePdf = useCallback(async () => {
     if (!quote || sharing) return;
@@ -171,6 +212,22 @@ export default function QuoteBuilderScreen() {
     }
   }, [flush, quote, sharing, updateQuoteFields]);
 
+  const callCustomer = useCallback(() => {
+    const phone = quote?.phone.trim();
+    if (!phone) return;
+    void Linking.openURL(telUrlForPhone(phone)).catch(() => {
+      Alert.alert('Could not place call', 'Check the phone number and try again.');
+    });
+  }, [quote?.phone]);
+
+  const openMaps = useCallback(() => {
+    const address = quote?.address.trim();
+    if (!address) return;
+    void Linking.openURL(mapsUrlForAddress(address)).catch(() => {
+      Alert.alert('Could not open Maps', 'Check the address and try again.');
+    });
+  }, [quote?.address]);
+
   const commitDiscount = () => {
     const parsed = Number(discountText.trim());
     if (!Number.isFinite(parsed) || parsed < 0) {
@@ -195,8 +252,32 @@ export default function QuoteBuilderScreen() {
     void flush();
   };
 
+  const commitDeposit = () => {
+    const parsed = Number(depositText.trim());
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setDepositText(String(quote?.deposit ?? 0));
+      return;
+    }
+    const next = Math.round(parsed * 100) / 100;
+    setDepositText(String(next));
+    updateQuoteFields({ deposit: next });
+    void flush();
+  };
+
+  const commitValidUntil = () => {
+    const next = normalizeValidUntil(validUntilText);
+    setValidUntilText(next ?? '');
+    updateQuoteFields({ validUntil: next });
+    void flush();
+  };
+
   const setDiscountType = (discountType: DiscountType) => {
     updateQuoteFields({ discountType });
+    void flush();
+  };
+
+  const setDepositType = (depositType: DiscountType) => {
+    updateQuoteFields({ depositType });
     void flush();
   };
 
@@ -298,20 +379,44 @@ export default function QuoteBuilderScreen() {
             />
 
             <FieldLabel>Phone</FieldLabel>
-            <TextInput
-              value={quote.phone}
-              onChangeText={(phone) => updateQuoteFields({ phone })}
-              onBlur={() => {
-                void flush();
-              }}
-              placeholder="Phone"
-              placeholderTextColor="#999"
-              keyboardType="phone-pad"
-              style={[
-                formStyles.input,
-                { color: textColor, backgroundColor: fieldBg, borderColor },
-              ]}
-            />
+            <View style={styles.actionField} lightColor="transparent" darkColor="transparent">
+              <TextInput
+                value={quote.phone}
+                onChangeText={(phone) => updateQuoteFields({ phone })}
+                onBlur={() => {
+                  void flush();
+                }}
+                placeholder="Phone"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+                style={[
+                  formStyles.input,
+                  styles.actionFieldInput,
+                  { color: textColor, backgroundColor: fieldBg, borderColor },
+                ]}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Call customer"
+                disabled={!quote.phone.trim()}
+                onPress={callCustomer}
+                style={({ pressed }) => [
+                  styles.actionChip,
+                  {
+                    borderColor: quote.phone.trim() ? tint : borderColor,
+                    backgroundColor: quote.phone.trim() ? tint : fieldBg,
+                    opacity: quote.phone.trim() ? 1 : 0.45,
+                  },
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text
+                  style={styles.actionChipText}
+                  lightColor={quote.phone.trim() ? '#fff' : '#111'}
+                  darkColor={quote.phone.trim() ? '#000' : '#fff'}>
+                  Call
+                </Text>
+              </Pressable>
+            </View>
 
             <FieldLabel>Email</FieldLabel>
             <TextInput
@@ -347,6 +452,20 @@ export default function QuoteBuilderScreen() {
                 { color: textColor, backgroundColor: fieldBg, borderColor },
               ]}
             />
+            {quote.address.trim() ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open address in Maps"
+                onPress={openMaps}
+                style={({ pressed }) => [
+                  styles.mapsLink,
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text style={[styles.mapsLinkText, { color: tint }]}>
+                  Open in Maps
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 
@@ -447,6 +566,87 @@ export default function QuoteBuilderScreen() {
           />
         </View>
 
+        <View style={[styles.adjustments, { borderColor, backgroundColor: fieldBg }]}>
+          <Text style={styles.sectionTitle}>Document</Text>
+          <Text style={styles.notesHint}>
+            Valid until appears in the PDF summary. Deposit and terms show below totals.
+          </Text>
+
+          <FieldLabel>Valid until (YYYY-MM-DD)</FieldLabel>
+          <TextInput
+            value={validUntilText}
+            onChangeText={setValidUntilText}
+            onBlur={commitValidUntil}
+            onSubmitEditing={commitValidUntil}
+            placeholder="2026-08-01"
+            placeholderTextColor="#999"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[
+              formStyles.input,
+              { color: textColor, backgroundColor: background, borderColor },
+            ]}
+          />
+
+          <FieldLabel>Deposit</FieldLabel>
+          <View style={styles.discountRow} lightColor="transparent" darkColor="transparent">
+            <View style={styles.typeToggle} lightColor="transparent" darkColor="transparent">
+              {(['flat', 'percent'] as DiscountType[]).map((type) => {
+                const selected = (quote.depositType ?? 'percent') === type;
+                return (
+                  <Pressable
+                    key={type}
+                    onPress={() => setDepositType(type)}
+                    style={[
+                      styles.typeChip,
+                      {
+                        borderColor: selected ? tint : borderColor,
+                        backgroundColor: selected ? tint : background,
+                      },
+                    ]}>
+                    <Text
+                      style={styles.typeChipText}
+                      lightColor={selected ? '#fff' : '#111'}
+                      darkColor={selected ? '#000' : '#fff'}>
+                      {type === 'flat' ? '$' : '%'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <TextInput
+              value={depositText}
+              onChangeText={setDepositText}
+              onBlur={commitDeposit}
+              onSubmitEditing={commitDeposit}
+              keyboardType="decimal-pad"
+              style={[
+                formStyles.input,
+                styles.discountInput,
+                { color: textColor, backgroundColor: background, borderColor },
+              ]}
+            />
+          </View>
+
+          <FieldLabel>Payment terms</FieldLabel>
+          <TextInput
+            value={quote.paymentTerms}
+            onChangeText={(paymentTerms) => updateQuoteFields({ paymentTerms })}
+            onBlur={() => {
+              void flush();
+            }}
+            placeholder="50% to schedule, balance on completion"
+            placeholderTextColor="#999"
+            multiline
+            textAlignVertical="top"
+            style={[
+              formStyles.input,
+              styles.termsInput,
+              { color: textColor, backgroundColor: background, borderColor },
+            ]}
+          />
+        </View>
+
         <View style={styles.notesBlock} lightColor="transparent" darkColor="transparent">
           <Text style={styles.sectionTitle}>Notes</Text>
           <Text style={styles.notesHint}>
@@ -492,23 +692,38 @@ export default function QuoteBuilderScreen() {
             {formatCurrency(totals.grandTotal)}
           </Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Share PDF quote"
-          disabled={sharing}
-          onPress={() => {
-            void handleSharePdf();
-          }}
-          style={({ pressed }) => [
-            formStyles.primaryButton,
-            styles.shareButton,
-            { backgroundColor: tint },
-            (pressed || sharing) && formStyles.pressed,
-          ]}>
-          <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
-            {sharing ? 'Preparing PDF…' : 'Share PDF'}
-          </Text>
-        </Pressable>
+        <View style={styles.actionRow} lightColor="transparent" darkColor="transparent">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Preview quote"
+            onPress={() => {
+              void openPreview();
+            }}
+            style={({ pressed }) => [
+              styles.secondaryBarButton,
+              { borderColor, backgroundColor: background },
+              pressed && formStyles.pressed,
+            ]}>
+            <Text style={styles.secondaryBarButtonText}>Preview</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Share PDF quote"
+            disabled={sharing}
+            onPress={() => {
+              void handleSharePdf();
+            }}
+            style={({ pressed }) => [
+              formStyles.primaryButton,
+              styles.shareButtonFlex,
+              { backgroundColor: tint },
+              (pressed || sharing) && formStyles.pressed,
+            ]}>
+            <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
+              {sharing ? 'Preparing…' : 'Share PDF'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <ProductPicker
@@ -581,6 +796,38 @@ const styles = StyleSheet.create({
   fields: {
     gap: 6,
     marginBottom: 8,
+  },
+  actionField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionFieldInput: {
+    flex: 1,
+  },
+  actionChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  actionChipText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  mapsLink: {
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+  },
+  mapsLinkText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  termsInput: {
+    minHeight: 72,
+    paddingTop: 14,
+    textAlignVertical: 'top',
   },
   itemsHeader: {
     marginTop: 12,
@@ -701,8 +948,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  shareButton: {
+  actionRow: {
     marginTop: 10,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  secondaryBarButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  secondaryBarButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  shareButtonFlex: {
+    flex: 1,
+    marginTop: 0,
   },
   saving: {
     fontSize: 13,

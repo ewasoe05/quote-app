@@ -95,6 +95,13 @@ function RootLayoutNav() {
               presentation: 'card',
             }}
           />
+          <Stack.Screen
+            name="quote/preview/[id]"
+            options={{
+              title: 'Preview',
+              presentation: 'card',
+            }}
+          />
         </Stack>
       </ThemeProvider>
     </GestureHandlerRootView>

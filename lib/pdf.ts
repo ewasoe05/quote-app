@@ -1,7 +1,9 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { Platform, Share } from 'react-native';
 
+import { buildQuoteShareMessage } from './quoteDocument';
 import {
   buildQuoteHtml,
   type QuotePdfInput,
@@ -83,28 +85,46 @@ export async function createQuotePdfFile(
 }
 
 /**
- * Renders the quote PDF and opens the native share sheet.
+ * Renders the quote PDF and opens the native share sheet with a ready message.
  *
- * On iOS, expo-sharing resolves when the sheet is dismissed — including cancel —
- * so callers must not treat resolution as proof the PDF was sent.
+ * On iOS, the share sheet can dismiss via cancel — callers must not treat
+ * resolution as proof the PDF was sent.
  */
 export async function shareQuotePdf(
   input: QuotePdfInput
 ): Promise<{ uri: string }> {
   const { uri } = await createQuotePdfFile(input);
+  const message = buildQuoteShareMessage({
+    quote: input.quote,
+    items: input.items,
+    businessName: input.business.businessName,
+  });
+  const businessName = input.business.businessName.trim() || 'Quote';
+  const customerName = input.quote.customerName.trim() || 'customer';
+  const dialogTitle = `Share quote for ${customerName} (${businessName})`;
+
+  // Prefer RN Share so iOS/Android get a message body with the PDF.
+  try {
+    await Share.share(
+      Platform.OS === 'ios'
+        ? { url: uri, message, title: dialogTitle }
+        : { url: uri, message: `${message}\n\n${uri}`, title: dialogTitle },
+      { dialogTitle, subject: dialogTitle }
+    );
+    return { uri };
+  } catch {
+    // Fall through to expo-sharing if the system share path fails.
+  }
 
   const available = await Sharing.isAvailableAsync();
   if (!available) {
     throw new Error('Sharing is not available on this device.');
   }
 
-  const businessName = input.business.businessName.trim() || 'Quote';
-  const customerName = input.quote.customerName.trim() || 'customer';
-
   await Sharing.shareAsync(uri, {
     mimeType: 'application/pdf',
     UTI: 'com.adobe.pdf',
-    dialogTitle: `Share quote for ${customerName} (${businessName})`,
+    dialogTitle,
   });
 
   return { uri };

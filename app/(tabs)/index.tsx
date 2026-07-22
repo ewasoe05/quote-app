@@ -18,6 +18,7 @@ import {
   getBusinessSettings,
   getQuotesWithTotals,
 } from '@/lib/db';
+import { validUntilFromDays } from '@/lib/quoteDocument';
 import { captureException } from '@/lib/monitoring';
 import type { QuoteListItem } from '@/lib/quotes';
 import {
@@ -90,6 +91,10 @@ export default function QuotesScreen() {
         discountType: 'flat',
         taxRate: business.defaultTaxRate || 0,
         notes: '',
+        validUntil: validUntilFromDays(business.defaultValidDays),
+        deposit: business.defaultDeposit || 0,
+        depositType: business.defaultDepositType || 'percent',
+        paymentTerms: business.defaultPaymentTerms || '',
       });
       router.push({ pathname: '/quote/[id]', params: { id: quote.id } });
     } catch (err) {

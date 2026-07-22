@@ -124,6 +124,7 @@ and apply the update.
 | Change | Ship with |
 |---|---|
 | Screens, styles, PDF HTML, calculations, copy | `npm run update:preview` / `update:production` |
+| Quote preview, share message, valid-until / deposit / terms fields | OTA (`eas update`) — uses existing Print / Share / Linking |
 | New native module (`expo-*` that needs native code) | New EAS build + reinstall |
 | New iOS/Android permissions in `app.json` | New EAS build + reinstall |
 | Expo SDK / React Native upgrade | New EAS build + reinstall |

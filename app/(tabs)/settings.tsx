@@ -42,6 +42,8 @@ export default function SettingsScreen() {
     ...DEFAULT_BUSINESS_SETTINGS,
   });
   const [taxText, setTaxText] = useState('0');
+  const [validDaysText, setValidDaysText] = useState('7');
+  const [depositText, setDepositText] = useState('0');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -51,6 +53,8 @@ export default function SettingsScreen() {
       const row = await getBusinessSettings();
       setSettings(row);
       setTaxText(String(row.defaultTaxRate ?? 0));
+      setValidDaysText(String(row.defaultValidDays ?? 0));
+      setDepositText(String(row.defaultDeposit ?? 0));
     } finally {
       setLoading(false);
     }
@@ -66,6 +70,14 @@ export default function SettingsScreen() {
     setTaxText(String(settings.defaultTaxRate ?? 0));
   }, [settings.defaultTaxRate]);
 
+  useEffect(() => {
+    setValidDaysText(String(settings.defaultValidDays ?? 0));
+  }, [settings.defaultValidDays]);
+
+  useEffect(() => {
+    setDepositText(String(settings.defaultDeposit ?? 0));
+  }, [settings.defaultDeposit]);
+
   const updateField = <K extends keyof BusinessSettings>(
     key: K,
     value: BusinessSettings[K]
@@ -79,16 +91,36 @@ export default function SettingsScreen() {
       Alert.alert('Invalid tax rate', 'Enter a tax rate of 0 or greater.');
       return;
     }
+    const parsedDays = Number(validDaysText.trim());
+    if (!Number.isFinite(parsedDays) || parsedDays < 0) {
+      Alert.alert('Invalid valid-until days', 'Enter 0 or more days.');
+      return;
+    }
+    const parsedDeposit = Number(depositText.trim());
+    if (!Number.isFinite(parsedDeposit) || parsedDeposit < 0) {
+      Alert.alert('Invalid deposit', 'Enter a deposit of 0 or greater.');
+      return;
+    }
+    const accent = settings.accentColor.trim();
+    if (!/^#([0-9a-fA-F]{6})$/.test(accent)) {
+      Alert.alert('Invalid accent color', 'Use a hex color like #2b6cb0.');
+      return;
+    }
 
     setSaving(true);
     try {
       const next: BusinessSettings = {
         ...settings,
         defaultTaxRate: Math.round(parsedTax * 100) / 100,
+        defaultValidDays: Math.max(0, Math.floor(parsedDays)),
+        defaultDeposit: Math.round(parsedDeposit * 100) / 100,
+        accentColor: accent,
       };
       await saveBusinessSettings(next);
       setSettings(next);
       setTaxText(String(next.defaultTaxRate));
+      setValidDaysText(String(next.defaultValidDays));
+      setDepositText(String(next.defaultDeposit));
       Alert.alert('Saved', 'Business settings will appear on quote PDFs.');
     } catch (err) {
       Alert.alert(
@@ -308,6 +340,93 @@ export default function SettingsScreen() {
         ]}
       />
 
+      <FieldLabel>Default valid-until (days)</FieldLabel>
+      <TextInput
+        value={validDaysText}
+        onChangeText={setValidDaysText}
+        placeholder="7"
+        placeholderTextColor="#999"
+        keyboardType="number-pad"
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
+      <Text style={styles.fieldHint}>
+        New quotes get this many days from today. Use 0 to leave blank.
+      </Text>
+
+      <FieldLabel>Default deposit</FieldLabel>
+      <View style={styles.depositRow} lightColor="transparent" darkColor="transparent">
+        <View style={styles.typeToggle} lightColor="transparent" darkColor="transparent">
+          {(['flat', 'percent'] as const).map((type) => {
+            const selected = settings.defaultDepositType === type;
+            return (
+              <Pressable
+                key={type}
+                onPress={() => updateField('defaultDepositType', type)}
+                style={[
+                  styles.typeChip,
+                  {
+                    borderColor: selected ? tint : borderColor,
+                    backgroundColor: selected ? tint : background,
+                  },
+                ]}>
+                <Text
+                  style={styles.typeChipText}
+                  lightColor={selected ? '#fff' : '#111'}
+                  darkColor={selected ? '#000' : '#fff'}>
+                  {type === 'flat' ? '$' : '%'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <TextInput
+          value={depositText}
+          onChangeText={setDepositText}
+          placeholder="0"
+          placeholderTextColor="#999"
+          keyboardType="decimal-pad"
+          style={[
+            formStyles.input,
+            styles.depositInput,
+            { color: textColor, backgroundColor: fieldBg, borderColor },
+          ]}
+        />
+      </View>
+
+      <FieldLabel>Default payment terms</FieldLabel>
+      <TextInput
+        value={settings.defaultPaymentTerms}
+        onChangeText={(defaultPaymentTerms) =>
+          updateField('defaultPaymentTerms', defaultPaymentTerms)
+        }
+        placeholder="50% to schedule, balance on completion"
+        placeholderTextColor="#999"
+        multiline
+        textAlignVertical="top"
+        style={[
+          formStyles.input,
+          styles.termsInput,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
+
+      <FieldLabel>PDF accent color</FieldLabel>
+      <TextInput
+        value={settings.accentColor}
+        onChangeText={(accentColor) => updateField('accentColor', accentColor)}
+        placeholder="#2b6cb0"
+        placeholderTextColor="#999"
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={[
+          formStyles.input,
+          { color: textColor, backgroundColor: fieldBg, borderColor },
+        ]}
+      />
+
       <FieldLabel>Quote footer (warranty / terms)</FieldLabel>
       <TextInput
         value={settings.quoteFooter}
@@ -366,6 +485,42 @@ const styles = StyleSheet.create({
     minHeight: 110,
     paddingTop: 14,
     textAlignVertical: 'top',
+  },
+  termsInput: {
+    minHeight: 72,
+    paddingTop: 14,
+    textAlignVertical: 'top',
+  },
+  fieldHint: {
+    fontSize: 13,
+    opacity: 0.55,
+    marginBottom: 8,
+    marginTop: -4,
+  },
+  depositRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  typeToggle: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  typeChip: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeChipText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  depositInput: {
+    flex: 1,
   },
   logoRow: {
     flexDirection: 'row',

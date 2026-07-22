@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 
 import { buildQuoteHtml } from '../lib/pdfTemplate';
 import type { BusinessSettings, Quote, QuoteItem } from '../lib/types';
+import { DEFAULT_ACCENT_COLOR, DEFAULT_BUSINESS_SETTINGS } from '../lib/types';
 
 const business: BusinessSettings = {
+  ...DEFAULT_BUSINESS_SETTINGS,
   businessName: 'Clear Water Co',
   phone: '555-0100',
   email: 'hello@clearwater.test',
@@ -27,6 +29,10 @@ const quote: Quote = {
   discountType: 'percent',
   taxRate: 6,
   notes: '',
+  validUntil: '2026-07-27',
+  deposit: 50,
+  depositType: 'percent',
+  paymentTerms: '50% to schedule, balance on completion',
   createdAt: '2026-07-20T12:00:00.000Z',
 };
 
@@ -69,12 +75,18 @@ assert.match(html, /Bill to/i);
 assert.match(html, /Ship to/i);
 assert.match(html, /Quote total/i);
 assert.match(html, /sum-dark/);
-assert.match(html, />Status</);
-assert.match(html, />Draft</);
+assert.match(html, />Valid until</);
+assert.doesNotMatch(html, />Status</);
+assert.match(html, /07\/27\/2026/);
 assert.match(html, /Description/);
 assert.match(html, /Thank you\./i);
 assert.match(html, /class="sign-block"/);
 assert.match(html, /tot-due-row/);
+assert.match(html, /Deposit to schedule/);
+assert.match(html, /Payment terms:/);
+assert.match(html, /50% to schedule, balance on completion/);
+assert.match(html, /#2b6cb0/);
+assert.equal(DEFAULT_ACCENT_COLOR, '#2b6cb0');
 
 // Quote number appears on the document so customers can reference it.
 assert.match(html, /Quote 1042/);
@@ -123,5 +135,16 @@ const blankCustomer = buildQuoteHtml({
 });
 assert.doesNotMatch(blankCustomer, /Martha Thomas|Hampton Inn|Zanesville/i);
 assert.doesNotMatch(blankCustomer, />Customer</);
+
+// Custom accent flows into PDF CSS.
+const accented = buildQuoteHtml(
+  {
+    quote,
+    items,
+    business: { ...business, accentColor: '#c45c26' },
+  },
+  null
+);
+assert.match(accented, /#c45c26/);
 
 console.log('pdf html checks passed');

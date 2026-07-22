@@ -1,8 +1,12 @@
 import { calcQuoteTotals } from './calc';
 import { formatCurrency } from './products';
+import {
+  calcDepositAmount,
+  normalizeValidUntil,
+} from './quoteDocument';
 import { formatQuoteNumber } from './quotes';
 import {
-  QUOTE_STATUS_LABELS,
+  DEFAULT_ACCENT_COLOR,
   type BusinessSettings,
   type Quote,
   type QuoteItem,
@@ -14,11 +18,25 @@ export type QuotePdfInput = {
   business: BusinessSettings;
 };
 
-/** Accent blue matching the Clear Solutions / QuickBooks-style invoice. */
-const ACCENT = '#2b6cb0';
-const ACCENT_LIGHT = '#d6e6f5';
 const TEXT = '#1a1a1a';
 const MUTED = '#5a6572';
+
+/** Soft tint of a hex accent for summary side boxes. */
+function lightenAccent(hex: string): string {
+  const raw = hex.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return '#d6e6f5';
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * 0.78);
+  const toHex = (c: number) => mix(c).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function resolveAccent(business: BusinessSettings): string {
+  const value = business.accentColor?.trim() || DEFAULT_ACCENT_COLOR;
+  return /^#([0-9a-fA-F]{6})$/.test(value) ? value : DEFAULT_ACCENT_COLOR;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -70,6 +88,8 @@ export function buildQuoteHtml(
   logoDataUri: string | null = null
 ): string {
   const { quote, items, business } = input;
+  const ACCENT = resolveAccent(business);
+  const ACCENT_LIGHT = lightenAccent(ACCENT);
   const totals = calcQuoteTotals({
     items,
     discount: quote.discount,
@@ -82,12 +102,21 @@ export function buildQuoteHtml(
   const quoteDate = formatPdfDate(quote.createdAt);
   const quoteRef = formatQuoteNumber(quote.quoteNumber);
   const quoteTitle = quoteRef ? `Quote ${quoteRef.replace(/^#/, '')}` : 'Quote';
-  const statusLabel = QUOTE_STATUS_LABELS[quote.status] ?? quote.status;
+  const validUntil = normalizeValidUntil(quote.validUntil);
+  const validUntilLabel = validUntil
+    ? formatPdfDate(`${validUntil}T12:00:00`)
+    : '—';
   const discountLabel =
     quote.discountType === 'percent'
       ? `Discount (${quote.discount}%)`
       : 'Discount';
   const showDiscount = totals.discountAmount > 0;
+  const depositDue = calcDepositAmount(
+    totals.grandTotal,
+    quote.deposit ?? 0,
+    quote.depositType ?? 'percent'
+  );
+  const paymentTerms = (quote.paymentTerms || '').trim();
 
   const logoHtml = logoDataUri
     ? `<img class="logo" src="${logoDataUri}" alt="" />`
@@ -144,6 +173,24 @@ export function buildQuoteHtml(
   const footerHtml = business.quoteFooter.trim()
     ? `<div class="terms">${nl2br(business.quoteFooter.trim())}</div>`
     : '';
+
+  const termsBlockParts: string[] = [];
+  if (depositDue > 0) {
+    termsBlockParts.push(
+      `<div><strong>Deposit to schedule:</strong> ${escapeHtml(
+        formatCurrency(depositDue)
+      )}</div>`
+    );
+  }
+  if (paymentTerms) {
+    termsBlockParts.push(
+      `<div><strong>Payment terms:</strong> ${nl2br(paymentTerms)}</div>`
+    );
+  }
+  const commercialHtml =
+    termsBlockParts.length > 0
+      ? `<div class="commercial">${termsBlockParts.join('')}</div>`
+      : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -318,6 +365,13 @@ export function buildQuoteHtml(
       font-size: 11px;
       margin-bottom: 3px;
     }
+    .commercial {
+      margin-bottom: 10px;
+      font-size: 10.5px;
+      line-height: 1.4;
+      page-break-inside: avoid;
+    }
+    .commercial div { margin-bottom: 4px; }
     .terms {
       color: ${MUTED};
       font-size: 9.5px;
@@ -413,8 +467,8 @@ export function buildQuoteHtml(
               <div class="sum-value">${escapeHtml(formatCurrency(totals.grandTotal))}</div>
             </td>
             <td class="sum-light">
-              <div class="sum-label">Status</div>
-              <div class="sum-value">${escapeHtml(statusLabel)}</div>
+              <div class="sum-label">Valid until</div>
+              <div class="sum-value">${validUntilLabel}</div>
             </td>
           </tr>
         </table>
@@ -440,6 +494,7 @@ export function buildQuoteHtml(
   <table class="bottom">
     <tr>
       <td class="bottom-left">
+        ${commercialHtml}
         ${notesHtml}
         ${footerHtml}
       </td>

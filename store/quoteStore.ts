@@ -23,6 +23,10 @@ type QuoteEditableFields = Partial<
     | 'taxRate'
     | 'notes'
     | 'status'
+    | 'validUntil'
+    | 'deposit'
+    | 'depositType'
+    | 'paymentTerms'
   >
 >;
 
