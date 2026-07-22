@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 
 import { CATALOG_SEEDED_KEY, DEFAULT_CATALOG } from './seed';
 import { clearAllProductAttachments } from './productFiles';
+import { clearAllQuoteMedia } from './quoteMedia';
 import { calculateQuoteTotal, type QuoteListItem } from './quotes';
 import type {
   BusinessSettings,
@@ -64,6 +65,11 @@ type QuoteRow = {
   deposit?: number | null;
   deposit_type?: string | null;
   payment_terms?: string | null;
+  status_reason?: string | null;
+  customer_signature_uri?: string | null;
+  tech_signature_uri?: string | null;
+  signed_at?: string | null;
+  job_site_photo_uri?: string | null;
   created_at: string;
 };
 
@@ -153,6 +159,17 @@ function mapQuote(row: QuoteRow): Quote {
     deposit: Number(row.deposit) || 0,
     depositType: (row.deposit_type === 'percent' ? 'percent' : 'flat') as DiscountType,
     paymentTerms: row.payment_terms ?? '',
+    statusReason: row.status_reason ?? '',
+    customerSignatureUri: row.customer_signature_uri?.trim()
+      ? row.customer_signature_uri.trim()
+      : null,
+    techSignatureUri: row.tech_signature_uri?.trim()
+      ? row.tech_signature_uri.trim()
+      : null,
+    signedAt: row.signed_at?.trim() ? row.signed_at.trim() : null,
+    jobSitePhotoUri: row.job_site_photo_uri?.trim()
+      ? row.job_site_photo_uri.trim()
+      : null,
     createdAt: row.created_at,
   };
 }
@@ -214,6 +231,11 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       deposit REAL NOT NULL DEFAULT 0,
       deposit_type TEXT NOT NULL DEFAULT 'percent',
       payment_terms TEXT NOT NULL DEFAULT '',
+      status_reason TEXT NOT NULL DEFAULT '',
+      customer_signature_uri TEXT,
+      tech_signature_uri TEXT,
+      signed_at TEXT,
+      job_site_photo_uri TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -270,6 +292,25 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await db.execAsync(
       `ALTER TABLE quotes ADD COLUMN payment_terms TEXT NOT NULL DEFAULT ''`
     );
+  }
+  if (!quoteColumns.some((column) => column.name === 'status_reason')) {
+    await db.execAsync(
+      `ALTER TABLE quotes ADD COLUMN status_reason TEXT NOT NULL DEFAULT ''`
+    );
+  }
+  if (!quoteColumns.some((column) => column.name === 'customer_signature_uri')) {
+    await db.execAsync(
+      'ALTER TABLE quotes ADD COLUMN customer_signature_uri TEXT'
+    );
+  }
+  if (!quoteColumns.some((column) => column.name === 'tech_signature_uri')) {
+    await db.execAsync('ALTER TABLE quotes ADD COLUMN tech_signature_uri TEXT');
+  }
+  if (!quoteColumns.some((column) => column.name === 'signed_at')) {
+    await db.execAsync('ALTER TABLE quotes ADD COLUMN signed_at TEXT');
+  }
+  if (!quoteColumns.some((column) => column.name === 'job_site_photo_uri')) {
+    await db.execAsync('ALTER TABLE quotes ADD COLUMN job_site_photo_uri TEXT');
   }
 
   await backfillQuoteNumbers(db);
@@ -684,8 +725,10 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
       `INSERT INTO quotes (
         id, quote_number, customer_name, phone, email, address, status,
         discount, discount_type, tax_rate, notes,
-        valid_until, deposit, deposit_type, payment_terms, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        valid_until, deposit, deposit_type, payment_terms,
+        status_reason, customer_signature_uri, tech_signature_uri,
+        signed_at, job_site_photo_uri, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       quoteNumber,
       input.customerName,
@@ -701,6 +744,11 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
       input.deposit ?? 0,
       input.depositType ?? 'percent',
       input.paymentTerms ?? '',
+      input.statusReason ?? '',
+      input.customerSignatureUri ?? null,
+      input.techSignatureUri ?? null,
+      input.signedAt ?? null,
+      input.jobSitePhotoUri ?? null,
       createdAt
     );
   });
@@ -721,6 +769,11 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
     deposit: input.deposit ?? 0,
     depositType: input.depositType ?? 'percent',
     paymentTerms: input.paymentTerms ?? '',
+    statusReason: input.statusReason ?? '',
+    customerSignatureUri: input.customerSignatureUri ?? null,
+    techSignatureUri: input.techSignatureUri ?? null,
+    signedAt: input.signedAt ?? null,
+    jobSitePhotoUri: input.jobSitePhotoUri ?? null,
     createdAt,
   };
 }
@@ -759,7 +812,9 @@ export async function updateQuote(
     `UPDATE quotes
      SET customer_name = ?, phone = ?, email = ?, address = ?, status = ?,
          discount = ?, discount_type = ?, tax_rate = ?, notes = ?,
-         valid_until = ?, deposit = ?, deposit_type = ?, payment_terms = ?
+         valid_until = ?, deposit = ?, deposit_type = ?, payment_terms = ?,
+         status_reason = ?, customer_signature_uri = ?, tech_signature_uri = ?,
+         signed_at = ?, job_site_photo_uri = ?
      WHERE id = ?`,
     next.customerName,
     next.phone,
@@ -774,6 +829,11 @@ export async function updateQuote(
     next.deposit,
     next.depositType,
     next.paymentTerms,
+    next.statusReason,
+    next.customerSignatureUri,
+    next.techSignatureUri,
+    next.signedAt,
+    next.jobSitePhotoUri,
     id
   );
 
@@ -785,6 +845,9 @@ export async function deleteQuote(id: string): Promise<boolean> {
   // Explicitly remove line items first so deletes work even if FK cascade is off.
   await db.runAsync('DELETE FROM quote_items WHERE quote_id = ?', id);
   const result = await db.runAsync('DELETE FROM quotes WHERE id = ?', id);
+  if (result.changes > 0) {
+    await clearAllQuoteMedia(id);
+  }
   return result.changes > 0;
 }
 
@@ -827,6 +890,11 @@ export async function duplicateQuote(sourceId: string): Promise<Quote> {
     deposit: source.deposit,
     depositType: source.depositType,
     paymentTerms: source.paymentTerms,
+    statusReason: '',
+    customerSignatureUri: null,
+    techSignatureUri: null,
+    signedAt: null,
+    jobSitePhotoUri: null,
   });
 
   for (const item of items) {

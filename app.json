@@ -16,7 +16,8 @@
       "bundleIdentifier": "com.ewasoe05.quoteapp",
       "buildNumber": "1",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow Quote App to access your photos so you can add a company logo to quotes.",
+        "NSPhotoLibraryUsageDescription": "Allow Quote App to access your photos so you can add a company logo or job-site photo to quotes.",
+        "NSCameraUsageDescription": "Allow Quote App to use the camera so you can attach a job-site photo to a quote.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -31,7 +32,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.CAMERA"
       ]
     },
     "web": {
@@ -56,8 +58,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Quote App to access your photos so you can add a company logo.",
-          "cameraPermission": false,
+          "photosPermission": "Allow Quote App to access your photos so you can add a company logo or job-site photo to quotes.",
+          "cameraPermission": "Allow Quote App to use the camera so you can attach a job-site photo to a quote.",
           "microphonePermission": false
         }
       ]

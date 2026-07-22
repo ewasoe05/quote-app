@@ -127,6 +127,8 @@ and apply the update.
 | Quote preview, share message, valid-until / deposit / terms fields | OTA (`eas update`) — uses existing Print / Share / Linking |
 | Quote + selected product literature (zipped with `fflate`) | OTA — pure JS zip, existing Share APIs |
 | Product packages/kits + cost/margin pricing helper | OTA — SQLite columns + JS expand on add |
+| Customer/tech signature (gesture pad → SVG), won/lost reason, job-site photo from library | OTA — no new native modules |
+| Job-site photo **from camera** + updated photo/camera permission strings | **New EAS build** (`app.json` camera + Info.plist) then resume OTA |
 | New native module (`expo-*` that needs native code) | New EAS build + reinstall |
 | New iOS/Android permissions in `app.json` | New EAS build + reinstall |
 | Expo SDK / React Native upgrade | New EAS build + reinstall |

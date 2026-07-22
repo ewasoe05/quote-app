@@ -33,6 +33,11 @@ const quote: Quote = {
   deposit: 50,
   depositType: 'percent',
   paymentTerms: '50% to schedule, balance on completion',
+  statusReason: '',
+  customerSignatureUri: null,
+  techSignatureUri: null,
+  signedAt: null,
+  jobSitePhotoUri: null,
   createdAt: '2026-07-20T12:00:00.000Z',
 };
 
@@ -146,5 +151,30 @@ const accented = buildQuoteHtml(
   null
 );
 assert.match(accented, /#c45c26/);
+
+// Signature + job-site photo embed when media URIs are provided.
+const signed = buildQuoteHtml(
+  {
+    quote: {
+      ...quote,
+      signedAt: '2026-07-21T15:00:00.000Z',
+      status: 'won',
+      statusReason: 'Signed on site',
+    },
+    items,
+    business,
+  },
+  null,
+  {
+    customerSignatureDataUri:
+      'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>'),
+    jobSitePhotoDataUri: 'data:image/png;base64,abc',
+  }
+);
+assert.match(signed, /Customer signature/);
+assert.match(signed, /Job site/);
+assert.match(signed, /Won reason/);
+assert.match(signed, /Signed on site/);
+assert.match(signed, /07\/21\/2026/);
 
 console.log('pdf html checks passed');

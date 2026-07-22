@@ -18,6 +18,12 @@ export type QuotePdfInput = {
   business: BusinessSettings;
 };
 
+export type QuotePdfMedia = {
+  customerSignatureDataUri?: string | null;
+  techSignatureDataUri?: string | null;
+  jobSitePhotoDataUri?: string | null;
+};
+
 const TEXT = '#1a1a1a';
 const MUTED = '#5a6572';
 
@@ -85,7 +91,8 @@ function businessContactLines(business: BusinessSettings): string[] {
  */
 export function buildQuoteHtml(
   input: QuotePdfInput,
-  logoDataUri: string | null = null
+  logoDataUri: string | null = null,
+  media: QuotePdfMedia = {}
 ): string {
   const { quote, items, business } = input;
   const ACCENT = resolveAccent(business);
@@ -190,6 +197,26 @@ export function buildQuoteHtml(
   const commercialHtml =
     termsBlockParts.length > 0
       ? `<div class="commercial">${termsBlockParts.join('')}</div>`
+      : '';
+
+  const signedDateLabel = quote.signedAt
+    ? formatPdfDate(quote.signedAt)
+    : '';
+  const customerSig = media.customerSignatureDataUri
+    ? `<span class="sig-img"><img src="${media.customerSignatureDataUri}" alt="Customer signature" /></span>`
+    : `<span class="blank"></span>`;
+  const techSig = media.techSignatureDataUri
+    ? `<span class="sig-img"><img src="${media.techSignatureDataUri}" alt="Tech signature" /></span>`
+    : `<span class="blank"></span>`;
+  const jobPhotoHtml = media.jobSitePhotoDataUri
+    ? `<div class="job-photo"><div class="job-photo-label">Job site</div><img src="${media.jobSitePhotoDataUri}" alt="Job site" /></div>`
+    : '';
+  const statusReasonHtml =
+    (quote.status === 'won' || quote.status === 'lost') &&
+    quote.statusReason.trim()
+      ? `<div class="status-reason"><strong>${escapeHtml(
+          quote.status === 'won' ? 'Won reason' : 'Lost reason'
+        )}:</strong> ${escapeHtml(quote.statusReason.trim())}</div>`
       : '';
 
   return `<!DOCTYPE html>
@@ -415,13 +442,48 @@ export function buildQuoteHtml(
       margin-bottom: 12px;
       font-size: 10.5px;
     }
-    .sign-line .label { display: inline-block; min-width: 68px; }
+    .sign-line .label { display: inline-block; min-width: 68px; vertical-align: top; padding-top: 18px; }
     .sign-line .blank {
       display: inline-block;
       border-bottom: 1px solid ${TEXT};
       min-width: 200px;
       height: 1em;
       vertical-align: bottom;
+    }
+    .sign-line .sig-img {
+      display: inline-block;
+      border-bottom: 1px solid ${TEXT};
+      min-width: 220px;
+      height: 48px;
+      vertical-align: bottom;
+    }
+    .sign-line .sig-img img {
+      max-height: 46px;
+      max-width: 220px;
+      object-fit: contain;
+    }
+    .job-photo {
+      margin-top: 18px;
+      page-break-inside: avoid;
+    }
+    .job-photo-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: ${MUTED};
+      margin-bottom: 6px;
+    }
+    .job-photo img {
+      max-width: 280px;
+      max-height: 180px;
+      object-fit: cover;
+      border: 1px solid #dde1e6;
+    }
+    .status-reason {
+      margin-top: 10px;
+      font-size: 10px;
+      color: ${MUTED};
     }
   </style>
 </head>
@@ -524,10 +586,16 @@ export function buildQuoteHtml(
   </table>
 
   <div class="sign-block">
-    <div class="sign-line"><span class="label">Date:</span> <span class="blank"></span></div>
-    <div class="sign-line"><span class="label">Customer:</span> <span class="blank"></span></div>
-    <div class="sign-line"><span class="label">Tech:</span> <span class="blank"></span></div>
+    <div class="sign-line"><span class="label">Date:</span> ${
+      signedDateLabel
+        ? `<span class="blank" style="border-bottom:none;">${escapeHtml(signedDateLabel)}</span>`
+        : `<span class="blank"></span>`
+    }</div>
+    <div class="sign-line"><span class="label">Customer:</span> ${customerSig}</div>
+    <div class="sign-line"><span class="label">Tech:</span> ${techSig}</div>
+    ${statusReasonHtml}
   </div>
+  ${jobPhotoHtml}
 </body>
 </html>`;
 }

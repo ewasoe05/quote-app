@@ -29,6 +29,11 @@ type QuoteEditableFields = Partial<
     | 'deposit'
     | 'depositType'
     | 'paymentTerms'
+    | 'statusReason'
+    | 'customerSignatureUri'
+    | 'techSignatureUri'
+    | 'signedAt'
+    | 'jobSitePhotoUri'
   >
 >;
 

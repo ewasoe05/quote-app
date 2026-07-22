@@ -1,4 +1,4 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform, Share } from 'react-native';
@@ -9,6 +9,7 @@ import {
   sweepShareBundleCache,
   type QuoteLiteratureOption,
 } from './quoteLiterature';
+import { readFileAsDataUri } from './quoteMedia';
 import {
   buildQuoteHtml,
   type QuotePdfInput,
@@ -18,26 +19,7 @@ export { buildQuoteHtml } from './pdfTemplate';
 export type { QuotePdfInput } from './pdfTemplate';
 
 async function logoToDataUri(logoUri: string | null): Promise<string | null> {
-  if (!logoUri) return null;
-  try {
-    const file = new File(logoUri);
-    if (!file.exists) return null;
-    const base64 = await file.base64();
-    const ext = (file.extension || '.jpg').replace('.', '').toLowerCase();
-    const mime =
-      ext === 'png'
-        ? 'image/png'
-        : ext === 'webp'
-          ? 'image/webp'
-          : ext === 'gif'
-            ? 'image/gif'
-            : ext === 'heic' || ext === 'heif'
-              ? 'image/heic'
-              : 'image/jpeg';
-    return `data:${mime};base64,${base64}`;
-  } catch {
-    return null;
-  }
+  return readFileAsDataUri(logoUri, 'image/jpeg');
 }
 
 /**
@@ -76,8 +58,18 @@ export function sweepPdfCache(keepUri?: string): void {
 export async function createQuotePdfFile(
   input: QuotePdfInput
 ): Promise<{ uri: string; html: string }> {
-  const logoDataUri = await logoToDataUri(input.business.logoUri);
-  const html = buildQuoteHtml(input, logoDataUri);
+  const [logoDataUri, customerSignatureDataUri, techSignatureDataUri, jobSitePhotoDataUri] =
+    await Promise.all([
+      logoToDataUri(input.business.logoUri),
+      readFileAsDataUri(input.quote.customerSignatureUri),
+      readFileAsDataUri(input.quote.techSignatureUri),
+      readFileAsDataUri(input.quote.jobSitePhotoUri),
+    ]);
+  const html = buildQuoteHtml(input, logoDataUri, {
+    customerSignatureDataUri,
+    techSignatureDataUri,
+    jobSitePhotoDataUri,
+  });
   const file = await Print.printToFileAsync({
     html,
     base64: false,

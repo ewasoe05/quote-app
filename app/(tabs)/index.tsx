@@ -95,6 +95,11 @@ export default function QuotesScreen() {
         deposit: business.defaultDeposit || 0,
         depositType: business.defaultDepositType || 'percent',
         paymentTerms: business.defaultPaymentTerms || '',
+        statusReason: '',
+        customerSignatureUri: null,
+        techSignatureUri: null,
+        signedAt: null,
+        jobSitePhotoUri: null,
       });
       router.push({ pathname: '/quote/[id]', params: { id: quote.id } });
     } catch (err) {

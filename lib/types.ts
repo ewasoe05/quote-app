@@ -108,6 +108,16 @@ export interface Quote {
   deposit: number;
   depositType: DiscountType;
   paymentTerms: string;
+  /** Why status is won/lost (optional free text). */
+  statusReason: string;
+  /** Local file URI for customer signature SVG. */
+  customerSignatureUri: string | null;
+  /** Local file URI for optional tech signature SVG. */
+  techSignatureUri: string | null;
+  /** ISO timestamp when customer signed; null if unsigned. */
+  signedAt: string | null;
+  /** Local file URI for optional job-site photo. */
+  jobSitePhotoUri: string | null;
   createdAt: string;
 }
 

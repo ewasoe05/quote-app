@@ -22,6 +22,11 @@ const quote: Quote = {
   deposit: 0,
   depositType: 'percent',
   paymentTerms: '',
+  statusReason: '',
+  customerSignatureUri: null,
+  techSignatureUri: null,
+  signedAt: null,
+  jobSitePhotoUri: null,
   createdAt: '2026-07-20T12:00:00.000Z',
 };
 

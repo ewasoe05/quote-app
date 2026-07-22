@@ -3,19 +3,24 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  Image,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
+  View as RNView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 
 import KeyboardForm from '@/components/KeyboardForm';
 import LineItemRow from '@/components/LineItemRow';
 import LiteratureShareSheet from '@/components/LiteratureShareSheet';
 import ProductPicker from '@/components/ProductPicker';
+import SignatureCaptureModal from '@/components/SignatureCaptureModal';
 import { Text, View, useThemeColor } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
 import { calcQuoteTotals } from '@/lib/calc';
@@ -29,10 +34,16 @@ import {
   telUrlForPhone,
 } from '@/lib/quoteDocument';
 import {
+  clearQuoteFile,
+  persistQuoteJobSitePhoto,
+  persistQuoteSignature,
+} from '@/lib/quoteMedia';
+import {
   listQuoteLiterature,
   type QuoteLiteratureOption,
 } from '@/lib/quoteLiterature';
 import { formatQuoteDate, formatQuoteNumber } from '@/lib/quotes';
+import type { SignatureDrawing } from '@/lib/signature';
 import type { DiscountType, Product, QuoteStatus } from '@/lib/types';
 import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from '@/lib/types';
 import { useQuoteStore } from '@/store/quoteStore';
@@ -85,6 +96,13 @@ export default function QuoteBuilderScreen() {
     QuoteLiteratureOption[]
   >([]);
   const [literatureLoading, setLiteratureLoading] = useState(false);
+  const [signRole, setSignRole] = useState<'customer' | 'tech' | null>(null);
+  const [signing, setSigning] = useState(false);
+  const [reasonModal, setReasonModal] = useState<{
+    status: 'won' | 'lost';
+  } | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -323,8 +341,178 @@ export default function QuoteBuilderScreen() {
   };
 
   const setStatus = (status: QuoteStatus) => {
-    updateQuoteFields({ status });
+    if (status === 'won' || status === 'lost') {
+      setReasonText(quote?.statusReason ?? '');
+      setReasonModal({ status });
+      return;
+    }
+    updateQuoteFields({ status, statusReason: '' });
     void flush();
+  };
+
+  const commitStatusReason = () => {
+    if (!reasonModal) return;
+    updateQuoteFields({
+      status: reasonModal.status,
+      statusReason: reasonText.trim(),
+    });
+    setReasonModal(null);
+    void flush();
+  };
+
+  const saveSignature = async (
+    role: 'customer' | 'tech',
+    drawing: SignatureDrawing
+  ) => {
+    if (!quote) return;
+    setSigning(true);
+    try {
+      await flush();
+      const uri = await persistQuoteSignature(quote.id, role, drawing);
+      if (role === 'customer') {
+        updateQuoteFields({
+          customerSignatureUri: uri,
+          signedAt: new Date().toISOString(),
+        });
+        await flush();
+        setSignRole(null);
+        if (quote.status !== 'won') {
+          Alert.alert(
+            'Mark as won?',
+            'Customer signature saved. Mark this quote as won?',
+            [
+              { text: 'Not yet', style: 'cancel' },
+              {
+                text: 'Mark as won',
+                onPress: () => {
+                  setReasonText(quote.statusReason || '');
+                  setReasonModal({ status: 'won' });
+                },
+              },
+            ]
+          );
+        }
+      } else {
+        updateQuoteFields({ techSignatureUri: uri });
+        await flush();
+        setSignRole(null);
+      }
+    } catch (err) {
+      captureException(err, { action: 'save-signature', quoteId: quote.id, role });
+      Alert.alert(
+        'Could not save signature',
+        err instanceof Error ? err.message : 'Something went wrong.'
+      );
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  const clearSignature = (role: 'customer' | 'tech') => {
+    if (!quote) return;
+    const uri =
+      role === 'customer' ? quote.customerSignatureUri : quote.techSignatureUri;
+    Alert.alert(
+      'Clear signature?',
+      role === 'customer'
+        ? 'Remove the customer signature from this quote?'
+        : 'Remove the tech signature from this quote?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              await clearQuoteFile(uri);
+              if (role === 'customer') {
+                updateQuoteFields({
+                  customerSignatureUri: null,
+                  signedAt: null,
+                });
+              } else {
+                updateQuoteFields({ techSignatureUri: null });
+              }
+              await flush();
+            })();
+          },
+        },
+      ]
+    );
+  };
+
+  const pickJobSitePhoto = async (source: 'library' | 'camera') => {
+    if (!quote || photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert(
+            'Camera permission needed',
+            'Enable camera access in Settings, or use a rebuild that includes camera permission (see docs/BUILD.md).'
+          );
+          return;
+        }
+      } else {
+        const permission =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert(
+            'Photos permission needed',
+            'Allow photo library access to attach a job-site photo.'
+          );
+          return;
+        }
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+            });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      await flush();
+      if (quote.jobSitePhotoUri) {
+        await clearQuoteFile(quote.jobSitePhotoUri);
+      }
+      const uri = await persistQuoteJobSitePhoto(quote.id, result.assets[0].uri);
+      updateQuoteFields({ jobSitePhotoUri: uri });
+      await flush();
+    } catch (err) {
+      captureException(err, { action: 'job-site-photo', quoteId: quote.id });
+      Alert.alert(
+        'Could not add photo',
+        err instanceof Error ? err.message : 'Something went wrong.'
+      );
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const clearJobSitePhoto = () => {
+    if (!quote?.jobSitePhotoUri) return;
+    Alert.alert('Remove job-site photo?', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            await clearQuoteFile(quote.jobSitePhotoUri);
+            updateQuoteFields({ jobSitePhotoUri: null });
+            await flush();
+          })();
+        },
+      },
+    ]);
   };
 
   if (loading || !quote) {
@@ -385,6 +573,112 @@ export default function QuoteBuilderScreen() {
               </Pressable>
             );
           })}
+        </View>
+        {(quote.status === 'won' || quote.status === 'lost') &&
+        quote.statusReason.trim() ? (
+          <Text style={styles.reasonLine}>
+            {quote.status === 'won' ? 'Won' : 'Lost'} reason:{' '}
+            {quote.statusReason.trim()}
+          </Text>
+        ) : null}
+
+        <View
+          style={[styles.acceptanceBlock, { borderColor, backgroundColor: fieldBg }]}>
+          <Text style={styles.sectionTitle}>Acceptance</Text>
+          <Text style={styles.notesHint}>
+            Customer signature embeds on the PDF. Optional tech signature and
+            job-site photo too.
+          </Text>
+
+          <View style={styles.acceptanceRow} lightColor="transparent" darkColor="transparent">
+            <Text style={styles.acceptanceLabel}>
+              Customer{quote.customerSignatureUri ? ' · signed' : ''}
+            </Text>
+            <View style={styles.acceptanceActions} lightColor="transparent" darkColor="transparent">
+              <Pressable
+                onPress={() => setSignRole('customer')}
+                style={({ pressed }) => [
+                  styles.miniBtn,
+                  { borderColor: tint },
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text style={[styles.miniBtnText, { color: tint }]}>
+                  {quote.customerSignatureUri ? 'Re-sign' : 'Capture'}
+                </Text>
+              </Pressable>
+              {quote.customerSignatureUri ? (
+                <Pressable onPress={() => clearSignature('customer')}>
+                  <Text style={styles.removeAttachText}>Clear</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.acceptanceRow} lightColor="transparent" darkColor="transparent">
+            <Text style={styles.acceptanceLabel}>
+              Tech{quote.techSignatureUri ? ' · signed' : ''}
+            </Text>
+            <View style={styles.acceptanceActions} lightColor="transparent" darkColor="transparent">
+              <Pressable
+                onPress={() => setSignRole('tech')}
+                style={({ pressed }) => [
+                  styles.miniBtn,
+                  { borderColor: tint },
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text style={[styles.miniBtnText, { color: tint }]}>
+                  {quote.techSignatureUri ? 'Re-sign' : 'Capture'}
+                </Text>
+              </Pressable>
+              {quote.techSignatureUri ? (
+                <Pressable onPress={() => clearSignature('tech')}>
+                  <Text style={styles.removeAttachText}>Clear</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.acceptanceRow} lightColor="transparent" darkColor="transparent">
+            <Text style={styles.acceptanceLabel}>Job-site photo</Text>
+            <View style={styles.acceptanceActions} lightColor="transparent" darkColor="transparent">
+              <Pressable
+                disabled={photoBusy}
+                onPress={() => {
+                  void pickJobSitePhoto('library');
+                }}
+                style={({ pressed }) => [
+                  styles.miniBtn,
+                  { borderColor: tint },
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text style={[styles.miniBtnText, { color: tint }]}>Library</Text>
+              </Pressable>
+              <Pressable
+                disabled={photoBusy}
+                onPress={() => {
+                  void pickJobSitePhoto('camera');
+                }}
+                style={({ pressed }) => [
+                  styles.miniBtn,
+                  { borderColor: tint },
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text style={[styles.miniBtnText, { color: tint }]}>Camera</Text>
+              </Pressable>
+              {quote.jobSitePhotoUri ? (
+                <Pressable onPress={clearJobSitePhoto}>
+                  <Text style={styles.removeAttachText}>Remove</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+          {quote.jobSitePhotoUri ? (
+            <Image
+              source={{ uri: quote.jobSitePhotoUri }}
+              style={styles.jobPhoto}
+              resizeMode="cover"
+            />
+          ) : null}
         </View>
 
         <Pressable
@@ -788,6 +1082,77 @@ export default function QuoteBuilderScreen() {
           void finishShare(selected);
         }}
       />
+
+      <SignatureCaptureModal
+        visible={signRole !== null}
+        title={signRole === 'tech' ? 'Tech signature' : 'Customer signature'}
+        confirming={signing}
+        onClose={() => {
+          if (signing) return;
+          setSignRole(null);
+        }}
+        onSave={(drawing) => {
+          if (!signRole) return;
+          void saveSignature(signRole, drawing);
+        }}
+      />
+
+      <Modal
+        visible={reasonModal !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setReasonModal(null)}>
+        <RNView style={styles.reasonBackdrop}>
+          <View style={[styles.reasonCard, { backgroundColor: background, borderColor }]}>
+            <Text style={styles.sheetTitle}>
+              {reasonModal?.status === 'won' ? 'Won reason' : 'Lost reason'}
+            </Text>
+            <Text style={styles.notesHint}>
+              Optional — helps you remember why this deal closed.
+            </Text>
+            <TextInput
+              value={reasonText}
+              onChangeText={setReasonText}
+              placeholder={
+                reasonModal?.status === 'won'
+                  ? 'e.g. Signed on site, deposit collected'
+                  : 'e.g. Chose competitor, budget'
+              }
+              placeholderTextColor="#999"
+              multiline
+              textAlignVertical="top"
+              style={[
+                formStyles.input,
+                styles.reasonInput,
+                { color: textColor, backgroundColor: fieldBg, borderColor },
+              ]}
+            />
+            <View style={styles.reasonActions} lightColor="transparent" darkColor="transparent">
+              <Pressable
+                onPress={() => setReasonModal(null)}
+                style={({ pressed }) => [
+                  styles.miniBtn,
+                  { borderColor },
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text style={styles.miniBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={commitStatusReason}
+                style={({ pressed }) => [
+                  formStyles.primaryButton,
+                  styles.reasonSave,
+                  { backgroundColor: tint },
+                  pressed && formStyles.pressed,
+                ]}>
+                <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
+                  Save status
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </RNView>
+      </Modal>
     </KeyboardForm>
   );
 }
@@ -820,6 +1185,89 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 8,
+  },
+  reasonLine: {
+    fontSize: 13,
+    opacity: 0.65,
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  acceptanceBlock: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 14,
+    gap: 8,
+    marginBottom: 8,
+  },
+  acceptanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  acceptanceLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  acceptanceActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  miniBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  miniBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  removeAttachText: {
+    color: '#d11a2a',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  jobPhoto: {
+    width: '100%',
+    height: 160,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  reasonBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  reasonCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 16,
+    gap: 8,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  reasonInput: {
+    minHeight: 90,
+    paddingTop: 12,
+  },
+  reasonActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
+  },
+  reasonSave: {
+    marginTop: 0,
+    flex: 1,
+    minHeight: 44,
   },
   sectionHeader: {
     borderWidth: StyleSheet.hairlineWidth,
