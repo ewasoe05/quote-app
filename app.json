@@ -62,7 +62,8 @@
           "cameraPermission": "Allow Quote App to use the camera so you can attach a job-site photo to a quote.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

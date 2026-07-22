@@ -129,6 +129,8 @@ and apply the update.
 | Product packages/kits + cost/margin pricing helper | OTA — SQLite columns + JS expand on add |
 | Customer/tech signature (gesture pad → SVG), won/lost reason, job-site photo from library | OTA — no new native modules |
 | Follow-up dates, Due today badges/filters, activity timeline, quote templates | OTA — badge-only (no notifications) |
+| Local SQLite **backup export/import** (zip via Files / iCloud) | OTA — uses existing Share + DocumentPicker + `fflate` |
+| Optional **Sentry** (`@sentry/react-native`, DSN via `EXPO_PUBLIC_SENTRY_DSN`) | **New EAS build** (native module) then set DSN; OTA can toggle DSN only after that binary |
 | Local follow-up **notifications** (`expo-notifications`) | **New EAS build** if/when added |
 | Job-site photo **from camera** + updated photo/camera permission strings | **New EAS build** (`app.json` camera + Info.plist) then resume OTA |
 | New native module (`expo-*` that needs native code) | New EAS build + reinstall |
@@ -145,25 +147,35 @@ Always ship a new binary after native changes, then resume OTA from that build.
 
 ### Crash reporting (Sentry)
 
-`lib/monitoring.ts` is the seam: `initMonitoring()` runs at app startup and
-`captureException()` is already called from the DB init path, PDF sharing, and
-every quote create/duplicate/delete handler. All of it no-ops until a DSN is
-present, so the app builds and runs unchanged today.
+`@sentry/react-native` is installed and wired through `lib/monitoring.ts`.
+`initMonitoring()` runs at startup and `wrapRoot()` wraps the root layout.
+`captureException()` / `addBreadcrumb()` no-op until a DSN is present, so builds
+without Sentry credentials stay quiet.
 
-To turn it on:
+**Requires a new EAS build** once (native Sentry module + Metro Debug IDs). After
+that binary is installed:
 
-```bash
-npx @sentry/wizard@latest -i reactNative
-```
+1. Create a Sentry project and copy the DSN.
+2. Set `EXPO_PUBLIC_SENTRY_DSN` in EAS environment variables (and local `.env` for
+   dev). The DSN is a public client value — safe in the bundle.
+3. Set `SENTRY_AUTH_TOKEN` as a **sensitive** EAS secret for source map upload —
+   never commit it.
+4. Rebuild (or OTA if only the DSN env changed on an already-Sentry-capable
+   binary).
 
-Then set `EXPO_PUBLIC_SENTRY_DSN` in `.env`, uncomment the marked blocks in
-`lib/monitoring.ts`, and wrap the root layout export with `Sentry.wrap()`.
-`SENTRY_AUTH_TOKEN` (used for source map upload) must be set as a **sensitive**
-EAS environment variable — never committed.
+`sendDefaultPii` is off. Do not put customer names, phones, addresses, or quote
+bodies in `captureException` extras — use operational stages only
+(e.g. `{ stage: 'backup-import' }`).
 
-Note that `sendDefaultPii` is deliberately off in the scaffold: quotes contain
-customer names, addresses, and phone numbers, and none of that should leave the
-device attached to a crash report.
+### Backup (Files / iCloud)
+
+Settings → **Export backup** / **Import backup** writes or restores a zip of
+`quote-app.db` plus document media (logo, product PDFs, signatures, job-site
+photos). Use the share sheet to save to Files or iCloud Drive. Import replaces
+all local data. Multi-device live sync is intentionally not included.
+
+Backup export/import is JS-only and can ship via OTA on builds that already have
+Share + DocumentPicker (this app does).
 
 ## Field / offline checklist
 

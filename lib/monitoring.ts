@@ -1,33 +1,27 @@
 /**
- * Crash reporting seam.
+ * Crash reporting seam — optional Sentry when EXPO_PUBLIC_SENTRY_DSN is set.
  *
- * This module intentionally has no dependency on Sentry yet, so the project
- * typechecks and builds before the SDK is installed. Every call site in the app
- * already routes through here — turning reporting on is a local change to this
- * one file.
+ * Quotes contain customer PII. Never attach quote/customer payloads to events;
+ * call sites should only pass operational context (e.g. { stage: 'pdf-share' }).
  *
  * ---------------------------------------------------------------------------
- * TO ENABLE (see https://docs.expo.dev/guides/using-sentry/):
- *
- *   1. Create a Sentry project and grab the DSN.
- *   2. Run the wizard, which installs the SDK and wires up Metro + source maps:
- *
- *        npx @sentry/wizard@latest -i reactNative
- *
- *   3. Put the DSN in .env as EXPO_PUBLIC_SENTRY_DSN (it is a public value —
- *      safe to ship in the bundle — but keep SENTRY_AUTH_TOKEN out of the repo
- *      and set it as a sensitive EAS environment variable instead).
- *   4. Replace the no-op bodies below with the commented-out implementations.
- *   5. Wrap the root layout export: `export default Sentry.wrap(RootLayout)`.
+ * TO ENABLE:
+ *   1. Create a Sentry project and copy the DSN.
+ *   2. Set EXPO_PUBLIC_SENTRY_DSN in EAS env / local .env.
+ *   3. Set SENTRY_AUTH_TOKEN as a sensitive EAS secret for source maps.
+ *   4. Ship a new EAS build (native @sentry/react-native module).
  * ---------------------------------------------------------------------------
  */
 
-// import * as Sentry from '@sentry/react-native';
+import * as Sentry from '@sentry/react-native';
+import type { ComponentType } from 'react';
+
+import { resolveMonitoringEnabled } from './monitoringConfig';
 
 const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? '';
 
 /** True once a DSN is configured; used to avoid noisy no-op work in dev. */
-export const isMonitoringEnabled = DSN.length > 0;
+export const isMonitoringEnabled = resolveMonitoringEnabled(DSN);
 
 /**
  * Call once, as early in app startup as possible.
@@ -36,14 +30,13 @@ export const isMonitoringEnabled = DSN.length > 0;
 export function initMonitoring(): void {
   if (!isMonitoringEnabled) return;
 
-  // Sentry.init({
-  //   dsn: DSN,
-  //   // Quotes contain customer names, addresses, and phone numbers. Leave this
-  //   // off so that PII never leaves the device with a crash report.
-  //   sendDefaultPii: false,
-  //   // Sample aggressively at first; dial down if the event quota gets tight.
-  //   tracesSampleRate: 1.0,
-  // });
+  Sentry.init({
+    dsn: DSN,
+    // Quotes contain customer names, addresses, and phone numbers. Leave this
+    // off so that PII never leaves the device with a crash report.
+    sendDefaultPii: false,
+    tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+  });
 }
 
 /**
@@ -61,7 +54,7 @@ export function captureException(
     return;
   }
 
-  // Sentry.captureException(error, context ? { extra: context } : undefined);
+  Sentry.captureException(error, context ? { extra: context } : undefined);
 }
 
 /**
@@ -71,5 +64,11 @@ export function captureException(
 export function addBreadcrumb(message: string, data?: Record<string, unknown>): void {
   if (!isMonitoringEnabled) return;
 
-  // Sentry.addBreadcrumb({ message, data, level: 'info' });
+  Sentry.addBreadcrumb({ message, data, level: 'info' });
+}
+
+/** Wrap the root component so native crashes / JS errors are captured. */
+export function wrapRoot(Root: ComponentType<object>): ComponentType<object> {
+  // Sentry.wrap's props generic is stricter than Expo Router's root layout type.
+  return Sentry.wrap(Root as ComponentType<Record<string, unknown>>) as ComponentType<object>;
 }

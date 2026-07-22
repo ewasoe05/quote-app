@@ -14,6 +14,7 @@ import { useFocusEffect } from 'expo-router';
 import KeyboardForm from '@/components/KeyboardForm';
 import { Text, View, useThemeColor } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
+import { exportBackup, importBackup } from '@/lib/backup';
 import {
   getBusinessSettings,
   saveBusinessSettings,
@@ -22,6 +23,7 @@ import {
   clearPersistedBusinessLogo,
   persistBusinessLogo,
 } from '@/lib/logo';
+import { captureException } from '@/lib/monitoring';
 import type { BusinessSettings } from '@/lib/types';
 import { DEFAULT_BUSINESS_SETTINGS } from '@/lib/types';
 
@@ -46,6 +48,7 @@ export default function SettingsScreen() {
   const [depositText, setDepositText] = useState('0');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -193,6 +196,58 @@ export default function SettingsScreen() {
         err instanceof Error ? err.message : 'Could not remove the logo.'
       );
     }
+  };
+
+  const handleExportBackup = async () => {
+    setBackupBusy(true);
+    try {
+      await exportBackup();
+    } catch (err) {
+      captureException(err, { stage: 'backup-export' });
+      Alert.alert(
+        'Export failed',
+        err instanceof Error ? err.message : 'Could not create a backup.'
+      );
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const runImportBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const result = await importBackup();
+      if (!result) return;
+      await load();
+      Alert.alert(
+        'Backup restored',
+        'Quotes, catalog, and media were replaced. Reopen any quote you had open.'
+      );
+    } catch (err) {
+      Alert.alert(
+        'Import failed',
+        err instanceof Error ? err.message : 'Could not restore that backup.'
+      );
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleImportBackup = () => {
+    Alert.alert(
+      'Replace all data?',
+      'Importing a backup overwrites quotes, products, settings, and media on this phone. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Import backup',
+          style: 'destructive',
+          onPress: () => {
+            void runImportBackup();
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -446,14 +501,48 @@ export default function SettingsScreen() {
         onPress={() => {
           void handleSave();
         }}
-        disabled={saving}
+        disabled={saving || backupBusy}
         style={({ pressed }) => [
           formStyles.primaryButton,
           { backgroundColor: tint },
-          (pressed || saving) && formStyles.pressed,
+          (pressed || saving || backupBusy) && formStyles.pressed,
         ]}>
         <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
           {saving ? 'Saving…' : 'Save settings'}
+        </Text>
+      </Pressable>
+
+      <Text style={[styles.heading, styles.backupHeading]}>Backup</Text>
+      <Text style={styles.subheading}>
+        Export a zip of your database and media to Files or iCloud. Import
+        replaces everything on this phone. Sync across devices is not included.
+      </Text>
+      <Pressable
+        onPress={() => {
+          void handleExportBackup();
+        }}
+        disabled={backupBusy}
+        style={({ pressed }) => [
+          styles.secondaryButton,
+          styles.backupButton,
+          { borderColor, backgroundColor: fieldBg },
+          (pressed || backupBusy) && formStyles.pressed,
+        ]}>
+        <Text style={[styles.secondaryButtonText, { color: tint }]}>
+          {backupBusy ? 'Working…' : 'Export backup'}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={handleImportBackup}
+        disabled={backupBusy}
+        style={({ pressed }) => [
+          styles.secondaryButton,
+          styles.backupButton,
+          { borderColor, backgroundColor: fieldBg },
+          (pressed || backupBusy) && formStyles.pressed,
+        ]}>
+        <Text style={[styles.secondaryButtonText, { color: tint }]}>
+          Import backup
         </Text>
       </Pressable>
     </KeyboardForm>
@@ -475,11 +564,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 4,
   },
+  backupHeading: {
+    marginTop: 28,
+  },
   subheading: {
     fontSize: 14,
     lineHeight: 20,
     opacity: 0.65,
     marginBottom: 12,
+  },
+  backupButton: {
+    marginBottom: 10,
+    alignSelf: 'stretch',
   },
   footerInput: {
     minHeight: 110,

@@ -7,7 +7,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { initializeDatabase, seedDefaultCatalog } from '@/lib/db';
-import { captureException, initMonitoring } from '@/lib/monitoring';
+import { captureException, initMonitoring, wrapRoot } from '@/lib/monitoring';
 import { sweepPdfCache } from '@/lib/pdf';
 
 // Before anything else, so startup crashes are captured too.
@@ -24,7 +24,7 @@ export const unstable_settings = {
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
@@ -79,6 +79,8 @@ export default function RootLayout() {
 
   return <RootLayoutNav />;
 }
+
+export default wrapRoot(RootLayout);
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();

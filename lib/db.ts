@@ -28,7 +28,7 @@ import { DEFAULT_BUSINESS_SETTINGS } from './types';
 import { normalizePackageComponents } from './products';
 import { normalizeFollowUpDate } from './quoteDocument';
 
-const DATABASE_NAME = 'quote-app.db';
+export const DATABASE_NAME = 'quote-app.db';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -215,6 +215,17 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
     dbPromise = SQLite.openDatabaseAsync(DATABASE_NAME);
   }
   return dbPromise;
+}
+
+/** Close the open connection so the on-disk DB file can be replaced (backup restore). */
+export async function closeDatabase(): Promise<void> {
+  if (!dbPromise) return;
+  try {
+    const db = await dbPromise;
+    await db.closeAsync();
+  } finally {
+    dbPromise = null;
+  }
 }
 
 export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
