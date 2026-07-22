@@ -2,14 +2,16 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   SectionList,
   StyleSheet,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 
+import { FabButton } from '@/components/Buttons';
+import EmptyState from '@/components/EmptyState';
 import ProductCard from '@/components/ProductCard';
-import { Text, View, useThemeColor } from '@/components/Themed';
+import { Text, View, useSurfaceColors } from '@/components/Themed';
+import { fonts } from '@/constants/Typography';
 import { deleteProduct, getAllProducts } from '@/lib/db';
 import { groupProductsByCategory } from '@/lib/products';
 import type { Product, ProductSection } from '@/lib/types';
@@ -18,8 +20,7 @@ export default function ProductsScreen() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const tint = useThemeColor({}, 'tint');
-  const background = useThemeColor({}, 'background');
+  const { tint, background, surface, navy } = useSurfaceColors();
 
   const loadProducts = useCallback(async () => {
     try {
@@ -51,22 +52,17 @@ export default function ProductsScreen() {
     [router]
   );
 
-  const handleDelete = useCallback(
-    async (product: Product) => {
-      try {
-        await deleteProduct(product.id);
-        setProducts((current) =>
-          current.filter((item) => item.id !== product.id)
-        );
-      } catch (err) {
-        Alert.alert(
-          'Delete failed',
-          err instanceof Error ? err.message : 'Could not delete product.'
-        );
-      }
-    },
-    []
-  );
+  const handleDelete = useCallback(async (product: Product) => {
+    try {
+      await deleteProduct(product.id);
+      setProducts((current) => current.filter((item) => item.id !== product.id));
+    } catch (err) {
+      Alert.alert(
+        'Delete failed',
+        err instanceof Error ? err.message : 'Could not delete product.'
+      );
+    }
+  }, []);
 
   const sections: ProductSection[] = groupProductsByCategory(products);
   const isEmpty = !loading && products.length === 0;
@@ -78,13 +74,12 @@ export default function ProductsScreen() {
           <ActivityIndicator size="large" color={tint} />
         </View>
       ) : isEmpty ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>No products yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Tap + to add softeners, RO systems, iron filters, and add-ons to
-            your catalog.
-          </Text>
-        </View>
+        <EmptyState
+          title="No products yet"
+          body="Add softeners, RO systems, iron filters, and add-ons to your catalog."
+          actionLabel="Add product"
+          onAction={openCreate}
+        />
       ) : (
         <SectionList
           sections={sections}
@@ -102,9 +97,11 @@ export default function ProductsScreen() {
           renderSectionHeader={({ section }) => (
             <View
               style={styles.sectionHeader}
-              lightColor="#fff"
-              darkColor="#000">
-              <Text style={styles.sectionTitle}>{section.title}</Text>
+              lightColor={surface}
+              darkColor={surface}>
+              <Text style={[styles.sectionTitle, { color: navy }]}>
+                {section.title}
+              </Text>
             </View>
           )}
           contentContainerStyle={styles.listContent}
@@ -112,19 +109,13 @@ export default function ProductsScreen() {
         />
       )}
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Add product"
-        style={({ pressed }) => [
-          styles.fab,
-          { backgroundColor: tint },
-          pressed && styles.fabPressed,
-        ]}
-        onPress={openCreate}>
-        <Text style={styles.fabLabel} lightColor="#fff" darkColor="#000">
-          +
-        </Text>
-      </Pressable>
+      {!isEmpty || loading ? (
+        <FabButton accessibilityLabel="Add product" onPress={openCreate}>
+          <Text style={styles.fabLabel} lightColor="#fff" darkColor="#fff">
+            +
+          </Text>
+        </FabButton>
+      ) : null}
     </View>
   );
 }
@@ -139,18 +130,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    opacity: 0.65,
-  },
   listContent: {
     paddingBottom: 96,
     paddingTop: 8,
@@ -161,33 +140,14 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontFamily: fonts.bold,
+    fontSize: 12,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    opacity: 0.55,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  fabPressed: {
-    opacity: 0.85,
   },
   fabLabel: {
+    fontFamily: fonts.regular,
     fontSize: 32,
-    fontWeight: '400',
     lineHeight: 34,
   },
 });

@@ -92,8 +92,8 @@ assert.match(html, /tot-due-row/);
 assert.match(html, /Deposit to schedule/);
 assert.match(html, /Payment terms:/);
 assert.match(html, /50% to schedule, balance on completion/);
-assert.match(html, /#2b6cb0/);
-assert.equal(DEFAULT_ACCENT_COLOR, '#2b6cb0');
+assert.match(html, /#1F6FEB/);
+assert.equal(DEFAULT_ACCENT_COLOR, '#1F6FEB');
 
 // Quote number appears on the document so customers can reference it.
 assert.match(html, /Quote 1042/);

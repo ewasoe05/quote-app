@@ -175,12 +175,12 @@ export type BusinessSettings = {
   defaultDepositType: DiscountType;
   defaultPaymentTerms: string;
   quoteFooter: string;
-  /** Hex accent used on quote PDFs, e.g. #2b6cb0. */
+  /** Hex accent used on quote PDFs, e.g. #1F6FEB. */
   accentColor: string;
   logoUri: string | null;
 };
 
-export const DEFAULT_ACCENT_COLOR = '#2b6cb0';
+export const DEFAULT_ACCENT_COLOR = '#1F6FEB';
 
 export const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
   businessName: '',

@@ -15,14 +15,22 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
+import { PrimaryButton, SecondaryButton } from '@/components/Buttons';
+import FieldLabel from '@/components/FieldLabel';
 import KeyboardForm from '@/components/KeyboardForm';
 import LineItemRow from '@/components/LineItemRow';
 import LiteratureShareSheet from '@/components/LiteratureShareSheet';
 import ProductPicker from '@/components/ProductPicker';
 import SignatureCaptureModal from '@/components/SignatureCaptureModal';
-import { Text, View, useThemeColor } from '@/components/Themed';
+import { Text, View, useSurfaceColors } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
+import { fonts } from '@/constants/Typography';
 import { calcQuoteTotals } from '@/lib/calc';
 import {
   addQuoteNoteEntry,
@@ -66,21 +74,23 @@ export default function QuoteBuilderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const quoteId = typeof id === 'string' ? id : '';
 
-  const tint = useThemeColor({}, 'tint');
-  const textColor = useThemeColor({}, 'text');
-  const background = useThemeColor({}, 'background');
-  const fieldBg = useThemeColor(
-    { light: '#f2f3f5', dark: 'rgba(255,255,255,0.08)' },
-    'background'
-  );
-  const borderColor = useThemeColor(
-    { light: '#dde1e6', dark: 'rgba(255,255,255,0.12)' },
-    'text'
-  );
-  const barBg = useThemeColor(
-    { light: '#ffffff', dark: '#111' },
-    'background'
-  );
+  const {
+    tint,
+    text: textColor,
+    background,
+    field: fieldBg,
+    border: borderColor,
+    surface: barBg,
+    navy,
+  } = useSurfaceColors();
+
+  const stickyOffset = useSharedValue(28);
+  useEffect(() => {
+    stickyOffset.value = withTiming(0, { duration: 280 });
+  }, [stickyOffset]);
+  const stickyAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: stickyOffset.value }],
+  }));
 
   const quote = useQuoteStore((s) => s.quote);
   const items = useQuoteStore((s) => s.items);
@@ -1211,9 +1221,10 @@ export default function QuoteBuilderScreen() {
         </View>
       </ScrollView>
 
-      <View
+      <Animated.View
         style={[
           styles.stickyBar,
+          stickyAnimStyle,
           {
             backgroundColor: barBg,
             borderColor,
@@ -1227,44 +1238,29 @@ export default function QuoteBuilderScreen() {
         />
         <TotalsRow label="Tax" value={formatCurrency(totals.tax)} />
         <View style={styles.grandRow} lightColor="transparent" darkColor="transparent">
-          <Text style={styles.grandLabel}>Total</Text>
+          <Text style={[styles.grandLabel, { color: navy }]}>Total</Text>
           <Text style={[styles.grandValue, { color: tint }]}>
             {formatCurrency(totals.grandTotal)}
           </Text>
         </View>
         <View style={styles.actionRow} lightColor="transparent" darkColor="transparent">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Preview quote"
+          <SecondaryButton
+            label="Preview"
             onPress={() => {
               void openPreview();
             }}
-            style={({ pressed }) => [
-              styles.secondaryBarButton,
-              { borderColor, backgroundColor: background },
-              pressed && formStyles.pressed,
-            ]}>
-            <Text style={styles.secondaryBarButtonText}>Preview</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Share PDF quote"
-            disabled={sharing || literatureLoading}
+            style={styles.secondaryBarButton}
+          />
+          <PrimaryButton
+            label={sharing || literatureLoading ? 'Preparing…' : 'Share PDF'}
             onPress={() => {
               void handleSharePdf();
             }}
-            style={({ pressed }) => [
-              formStyles.primaryButton,
-              styles.shareButtonFlex,
-              { backgroundColor: tint },
-              (pressed || sharing) && formStyles.pressed,
-            ]}>
-            <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
-              {sharing || literatureLoading ? 'Preparing…' : 'Share PDF'}
-            </Text>
-          </Pressable>
+            disabled={sharing || literatureLoading}
+            style={styles.shareButtonFlex}
+          />
         </View>
-      </View>
+      </Animated.View>
 
       <ProductPicker
         visible={pickerOpen}
@@ -1360,10 +1356,6 @@ export default function QuoteBuilderScreen() {
       </Modal>
     </KeyboardForm>
   );
-}
-
-function FieldLabel({ children }: { children: string }) {
-  return <Text style={formStyles.label}>{children}</Text>;
 }
 
 function TotalsRow({ label, value }: { label: string; value: string }) {
@@ -1490,10 +1482,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   sectionTitle: {
+    fontFamily: fonts.semibold,
     fontSize: 16,
-    fontWeight: '700',
   },
   sectionHint: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     opacity: 0.55,
   },
@@ -1650,11 +1643,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     gap: 4,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -2 },
   },
   totalRow: {
     flexDirection: 'row',
@@ -1662,12 +1650,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalLabel: {
+    fontFamily: fonts.regular,
     fontSize: 14,
     opacity: 0.65,
   },
   totalValue: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    fontWeight: '500',
   },
   grandRow: {
     flexDirection: 'row',
@@ -1676,12 +1665,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   grandLabel: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '700',
   },
   grandValue: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '700',
   },
   actionRow: {
     marginTop: 10,
@@ -1689,22 +1678,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   secondaryBarButton: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  secondaryBarButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  shareButtonFlex: {
     flex: 1,
     marginTop: 0,
   },
+  shareButtonFlex: {
+    flex: 1.35,
+    marginTop: 0,
+  },
   saving: {
+    fontFamily: fonts.semibold,
     fontSize: 13,
-    fontWeight: '600',
   },
 });

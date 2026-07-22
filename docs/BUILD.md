@@ -130,6 +130,7 @@ and apply the update.
 | Customer/tech signature (gesture pad → SVG), won/lost reason, job-site photo from library | OTA — no new native modules |
 | Follow-up dates, Due today badges/filters, activity timeline, quote templates | OTA — badge-only (no notifications) |
 | Local SQLite **backup export/import** (zip via Files / iCloud) | OTA — uses existing Share + DocumentPicker + `fflate` |
+| Field-trades **UI redesign** (Outfit fonts, brand tokens, screen pass) | OTA — fonts + JS only; no new native modules |
 | Optional **Sentry** (`@sentry/react-native`, DSN via `EXPO_PUBLIC_SENTRY_DSN`) | **New EAS build** (native module) then set DSN; OTA can toggle DSN only after that binary |
 | Local follow-up **notifications** (`expo-notifications`) | **New EAS build** if/when added |
 | Job-site photo **from camera** + updated photo/camera permission strings | **New EAS build** (`app.json` camera + Info.plist) then resume OTA |
