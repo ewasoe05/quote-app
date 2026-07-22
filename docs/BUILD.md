@@ -66,31 +66,75 @@ npx eas submit --platform ios --profile production
 - **APK:** `preview` profile (`buildType: apk`) — install on devices without Play.
 - **AAB:** `production` profile (`buildType: app-bundle`) — upload to Play Console (internal track is preconfigured under `submit.production.android`).
 
+## Over-the-air updates (EAS Update)
+
+JS/CSS/asset fixes can ship to installed phones **without** rebuilding or
+reinstalling. Native changes still need a new binary.
+
+### One-time setup (done in repo)
+
+- `expo-updates` is a dependency
+- `app.json` has `runtimeVersion.policy: "fingerprint"` and
+  `updates.url: https://u.expo.dev/<projectId>`
+- `eas.json` build profiles set matching channels:
+  - `preview` → channel `preview`
+  - `production` → channel `production`
+  - `development` → channel `development`
+
+**Expo Go is not enough** for this app’s native modules. Install a real
+**preview** (internal) or **TestFlight / production** build that was created
+*after* Update was configured. Only that binary will check for OTA updates.
+
+### First install (required once per native binary)
+
+```bash
+# Internal device build (ad hoc / preview)
+npm run build:ios:preview
+
+# Or TestFlight
+npm run build:ios:production
+npm run submit:ios
+```
+
+Install that build on your iPhone. After that, most day-to-day app changes can
+go out with `eas update` instead of a new install.
+
+### Publish a JS-only update
+
+```bash
+# Preview / internal builds
+npm run update:preview -- --message "Tighten quote PDF layout"
+
+# TestFlight / production builds
+npm run update:production -- --message "Tighten quote PDF layout"
+```
+
+Equivalent CLI:
+
+```bash
+npx eas-cli update --channel preview --environment preview --message "…"
+npx eas-cli update --channel production --environment production --message "…"
+```
+
+On the phone: force-quit and reopen the app (sometimes twice) so it can download
+and apply the update.
+
+### When to use `eas update` vs a new build
+
+| Change | Ship with |
+|---|---|
+| Screens, styles, PDF HTML, calculations, copy | `npm run update:preview` / `update:production` |
+| New native module (`expo-*` that needs native code) | New EAS build + reinstall |
+| New iOS/Android permissions in `app.json` | New EAS build + reinstall |
+| Expo SDK / React Native upgrade | New EAS build + reinstall |
+
+`runtimeVersion` uses the **fingerprint** policy: when native code changes, the
+fingerprint changes and old binaries correctly refuse incompatible updates.
+Always ship a new binary after native changes, then resume OTA from that build.
+
+---
+
 ## Pending setup
-
-Two integrations are scaffolded in the repo but not yet active. Both need
-credentials that can't live in source control.
-
-### Over-the-air updates (EAS Update)
-
-`app.json` sets `runtimeVersion` to the `fingerprint` policy, which derives
-compatibility automatically — including across SDK upgrades and native changes.
-`expo-updates` is listed as a dependency but still needs installing and linking:
-
-```bash
-npx expo install expo-updates
-npx eas update:configure   # writes updates.url into app.json
-```
-
-After that, ship a JS-only fix without an App Store review:
-
-```bash
-eas update --branch production --message "Fix totals rounding"
-```
-
-Native changes (new modules, permission strings, SDK bumps) still require a new
-binary — the fingerprint policy will change, and old binaries correctly stop
-accepting the update.
 
 ### Crash reporting (Sentry)
 
