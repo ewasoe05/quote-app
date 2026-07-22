@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Pressable,
   StyleSheet,
   TextInput,
@@ -104,7 +105,18 @@ export default function SettingsScreen() {
     if (!permission.granted) {
       Alert.alert(
         'Permission needed',
-        'Allow photo library access to choose a company logo.'
+        'Allow photo library access to choose a company logo.',
+        permission.canAskAgain
+          ? [{ text: 'OK' }]
+          : [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Open Settings',
+                onPress: () => {
+                  void Linking.openSettings();
+                },
+              },
+            ]
       );
       return;
     }
@@ -120,10 +132,14 @@ export default function SettingsScreen() {
 
     try {
       const uri = await persistBusinessLogo(result.assets[0].uri);
-      if (settings.logoUri && settings.logoUri !== uri) {
-        await clearPersistedBusinessLogo(settings.logoUri);
+      const previousLogo = settings.logoUri;
+      const next: BusinessSettings = { ...settings, logoUri: uri };
+      // Persist immediately so the logo survives leaving Settings without tapping Save.
+      await saveBusinessSettings(next);
+      if (previousLogo && previousLogo !== uri) {
+        await clearPersistedBusinessLogo(previousLogo);
       }
-      updateField('logoUri', uri);
+      setSettings(next);
     } catch (err) {
       Alert.alert(
         'Logo failed',
@@ -133,8 +149,18 @@ export default function SettingsScreen() {
   };
 
   const handleRemoveLogo = async () => {
-    await clearPersistedBusinessLogo(settings.logoUri);
-    updateField('logoUri', null);
+    try {
+      const previousLogo = settings.logoUri;
+      const next: BusinessSettings = { ...settings, logoUri: null };
+      await saveBusinessSettings(next);
+      await clearPersistedBusinessLogo(previousLogo);
+      setSettings(next);
+    } catch (err) {
+      Alert.alert(
+        'Remove failed',
+        err instanceof Error ? err.message : 'Could not remove the logo.'
+      );
+    }
   };
 
   if (loading) {
