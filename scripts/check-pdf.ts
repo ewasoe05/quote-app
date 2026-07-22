@@ -36,6 +36,7 @@ const items: QuoteItem[] = [
     quoteId: 'q1',
     productId: 'p1',
     nameSnapshot: 'Clack WS1 48k Softener',
+    descriptionSnapshot: 'Clack WS1 valve, 48k resin tank',
     priceSnapshot: 1599,
     quantity: 1,
   },
@@ -44,6 +45,7 @@ const items: QuoteItem[] = [
     quoteId: 'q1',
     productId: 'p2',
     nameSnapshot: 'Brine Tank',
+    descriptionSnapshot: '',
     priceSnapshot: 179,
     quantity: 2,
   },
@@ -54,6 +56,7 @@ const html = buildQuoteHtml({ quote, items, business }, null);
 assert.match(html, /Clear Water Co/);
 assert.match(html, /Jane Doe/);
 assert.match(html, /Clack WS1 48k Softener/);
+assert.match(html, /Clack WS1 valve, 48k resin tank/);
 assert.match(html, /Brine Tank/);
 assert.match(html, /License # LIC-123/);
 assert.match(html, /1-year parts warranty/);
@@ -65,8 +68,13 @@ assert.match(html, /thead\s*\{\s*display:\s*table-header-group/);
 assert.match(html, /Bill to/i);
 assert.match(html, /Ship to/i);
 assert.match(html, /Quote total/i);
+assert.match(html, /sum-dark/);
+assert.match(html, />Status</);
+assert.match(html, />Draft</);
+assert.match(html, /Description/);
 assert.match(html, /Thank you\./i);
 assert.match(html, /class="sign-block"/);
+assert.match(html, /tot-due-row/);
 
 // Quote number appears on the document so customers can reference it.
 assert.match(html, /Quote 1042/);

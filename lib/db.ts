@@ -61,6 +61,7 @@ type QuoteItemRow = {
   quote_id: string;
   product_id: string;
   name_snapshot: string;
+  description_snapshot?: string | null;
   price_snapshot: number;
   quantity: number;
 };
@@ -125,6 +126,7 @@ function mapQuoteItem(row: QuoteItemRow): QuoteItem {
     quoteId: row.quote_id,
     productId: row.product_id,
     nameSnapshot: row.name_snapshot,
+    descriptionSnapshot: row.description_snapshot ?? '',
     priceSnapshot: row.price_snapshot,
     quantity: row.quantity,
   };
@@ -175,6 +177,7 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       quote_id TEXT NOT NULL,
       product_id TEXT NOT NULL,
       name_snapshot TEXT NOT NULL,
+      description_snapshot TEXT NOT NULL DEFAULT '',
       price_snapshot REAL NOT NULL DEFAULT 0,
       quantity REAL NOT NULL DEFAULT 1,
       FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
@@ -215,6 +218,17 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!productColumns.some((column) => column.name === 'attachments')) {
     await db.execAsync(
       `ALTER TABLE products ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'`
+    );
+  }
+
+  const quoteItemColumns = await db.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(quote_items)'
+  );
+
+  // Migrate older DBs that predate description snapshots on line items.
+  if (!quoteItemColumns.some((column) => column.name === 'description_snapshot')) {
+    await db.execAsync(
+      `ALTER TABLE quote_items ADD COLUMN description_snapshot TEXT NOT NULL DEFAULT ''`
     );
   }
 
@@ -612,6 +626,7 @@ export async function duplicateQuote(sourceId: string): Promise<Quote> {
       quoteId: copy.id,
       productId: item.productId,
       nameSnapshot: item.nameSnapshot,
+      descriptionSnapshot: item.descriptionSnapshot ?? '',
       priceSnapshot: item.priceSnapshot,
       quantity: item.quantity,
     });
@@ -627,16 +642,19 @@ export async function createQuoteItem(input: NewQuoteItem): Promise<QuoteItem> {
   const item: QuoteItem = {
     id: createId(),
     ...input,
+    descriptionSnapshot: input.descriptionSnapshot ?? '',
   };
 
   await db.runAsync(
     `INSERT INTO quote_items (
-      id, quote_id, product_id, name_snapshot, price_snapshot, quantity
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
+      id, quote_id, product_id, name_snapshot, description_snapshot,
+      price_snapshot, quantity
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     item.id,
     item.quoteId,
     item.productId,
     item.nameSnapshot,
+    item.descriptionSnapshot,
     item.priceSnapshot,
     item.quantity
   );
@@ -679,10 +697,12 @@ export async function updateQuoteItem(
   const db = await getDatabase();
   await db.runAsync(
     `UPDATE quote_items
-     SET product_id = ?, name_snapshot = ?, price_snapshot = ?, quantity = ?
+     SET product_id = ?, name_snapshot = ?, description_snapshot = ?,
+         price_snapshot = ?, quantity = ?
      WHERE id = ?`,
     next.productId,
     next.nameSnapshot,
+    next.descriptionSnapshot,
     next.priceSnapshot,
     next.quantity,
     id

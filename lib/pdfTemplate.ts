@@ -1,7 +1,12 @@
 import { calcQuoteTotals } from './calc';
 import { formatCurrency } from './products';
 import { formatQuoteNumber } from './quotes';
-import type { BusinessSettings, Quote, QuoteItem } from './types';
+import {
+  QUOTE_STATUS_LABELS,
+  type BusinessSettings,
+  type Quote,
+  type QuoteItem,
+} from './types';
 
 export type QuotePdfInput = {
   quote: Quote;
@@ -11,9 +16,9 @@ export type QuotePdfInput = {
 
 /** Accent blue matching the Clear Solutions / QuickBooks-style invoice. */
 const ACCENT = '#2b6cb0';
-const ACCENT_LIGHT = '#dceaf8';
+const ACCENT_LIGHT = '#d6e6f5';
 const TEXT = '#1a1a1a';
-const MUTED = '#4a5568';
+const MUTED = '#5a6572';
 
 function escapeHtml(value: string): string {
   return value
@@ -57,7 +62,8 @@ function businessContactLines(business: BusinessSettings): string[] {
 
 /**
  * Pure HTML builder for quote PDFs.
- * Layout mirrors the QuickBooks-style invoice; logo + customer come from app data only.
+ * Layout mirrors QuickBooks Invoice 5297; logo + customer come from app data only.
+ * Uses tables for critical layout so expo-print renders reliably on iOS.
  */
 export function buildQuoteHtml(
   input: QuotePdfInput,
@@ -76,6 +82,7 @@ export function buildQuoteHtml(
   const quoteDate = formatPdfDate(quote.createdAt);
   const quoteRef = formatQuoteNumber(quote.quoteNumber);
   const quoteTitle = quoteRef ? `Quote ${quoteRef.replace(/^#/, '')}` : 'Quote';
+  const statusLabel = QUOTE_STATUS_LABELS[quote.status] ?? quote.status;
   const discountLabel =
     quote.discountType === 'percent'
       ? `Discount (${quote.discount}%)`
@@ -98,23 +105,23 @@ export function buildQuoteHtml(
   ].filter((line) => line.length > 0);
   const billToHtml = billToParts.length
     ? billToParts.map((line) => `<div>${escapeHtml(line)}</div>`).join('')
-    : `<div class="placeholder">&nbsp;</div>`;
+    : `&nbsp;`;
 
   // SHIP TO / service address from the quote address only.
   const shipTo = quote.address.trim();
-  const shipToHtml = shipTo
-    ? `<div>${nl2br(shipTo)}</div>`
-    : `<div class="placeholder">&nbsp;</div>`;
+  const shipToHtml = shipTo ? nl2br(shipTo) : `&nbsp;`;
 
   const itemRows =
     items.length === 0
-      ? `<tr><td colspan="4" class="muted">No line items</td></tr>`
+      ? `<tr><td colspan="5" class="muted">No line items</td></tr>`
       : items
           .map((item) => {
             const lineTotal = item.priceSnapshot * item.quantity;
+            const description = (item.descriptionSnapshot ?? '').trim();
             return `<tr>
               <td class="num qty">${escapeHtml(String(item.quantity))}</td>
               <td class="activity">${escapeHtml(item.nameSnapshot)}</td>
+              <td class="desc">${description ? nl2br(description) : ''}</td>
               <td class="num">${escapeHtml(formatPlainAmount(item.priceSnapshot))}</td>
               <td class="num">${escapeHtml(formatPlainAmount(lineTotal))}</td>
             </tr>`;
@@ -122,9 +129,10 @@ export function buildQuoteHtml(
           .join('');
 
   const discountRow = showDiscount
-    ? `<div class="tot-row"><span>${escapeHtml(discountLabel)}</span><span>−${escapeHtml(
-        formatPlainAmount(totals.discountAmount)
-      )}</span></div>`
+    ? `<tr>
+        <td class="tot-label">${escapeHtml(discountLabel)}</td>
+        <td class="tot-val">−${escapeHtml(formatPlainAmount(totals.discountAmount))}</td>
+      </tr>`
     : '';
 
   const notesHtml = quote.notes.trim()
@@ -143,270 +151,283 @@ export function buildQuoteHtml(
   <meta charset="utf-8" />
   <title>${escapeHtml(businessName || 'Quote')}${quoteRef ? ` ${escapeHtml(quoteRef)}` : ''}</title>
   <style>
-    @page { margin: 36px 40px; }
+    @page { margin: 32px 36px; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: ${TEXT};
       font-family: Helvetica, Arial, sans-serif;
-      font-size: 11px;
-      line-height: 1.4;
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 14px;
-    }
-    .company {
-      flex: 1;
-      min-width: 0;
-      font-size: 11px;
+      font-size: 10.5px;
       line-height: 1.35;
-      color: ${TEXT};
+    }
+    table { border-collapse: collapse; }
+    .header {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .header td { vertical-align: top; }
+    .company {
+      width: 32%;
+      font-size: 10.5px;
+      line-height: 1.3;
     }
     .company-name {
       font-weight: 700;
-      font-size: 13px;
+      font-size: 12px;
       margin: 0 0 2px;
     }
-    .logo-wrap {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 8px;
+    .logo-cell {
+      width: 36%;
+      text-align: center;
+      vertical-align: middle;
     }
     .logo {
-      max-width: 160px;
-      max-height: 72px;
+      max-width: 170px;
+      max-height: 68px;
       width: auto;
       height: auto;
       object-fit: contain;
     }
     .doc-title {
-      flex: 1;
+      width: 32%;
       text-align: right;
       color: ${ACCENT};
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 700;
-      line-height: 1.1;
+      line-height: 1.05;
       white-space: nowrap;
+      padding-top: 4px;
     }
     .rule {
       border: 0;
-      border-top: 2px solid ${ACCENT};
-      margin: 0 0 16px;
+      border-top: 1.5px solid ${ACCENT};
+      margin: 0 0 12px;
     }
-    .meta-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 20px;
-      margin-bottom: 20px;
-      align-items: stretch;
+    .meta {
+      width: 100%;
+      margin-bottom: 14px;
     }
-    .parties {
-      display: flex;
-      gap: 36px;
-      flex: 1;
+    .meta td { vertical-align: top; }
+    .parties { width: 58%; }
+    .party-table { width: 100%; }
+    .party-table td {
+      width: 50%;
+      vertical-align: top;
+      padding-right: 16px;
     }
-    .party { min-width: 140px; max-width: 220px; }
     .party-label {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       color: ${TEXT};
     }
-    .party div { line-height: 1.35; }
-    .placeholder { min-height: 1.2em; }
-    .summary {
-      display: flex;
-      align-self: flex-start;
-      border-collapse: collapse;
+    .party-body {
+      font-size: 10.5px;
+      line-height: 1.35;
     }
-    .sum-box {
-      min-width: 88px;
-      padding: 8px 12px;
+    .summary-wrap {
+      width: 42%;
+      text-align: right;
+    }
+    .summary {
+      width: auto;
+      margin-left: auto;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .summary td {
+      padding: 7px 11px;
+      vertical-align: top;
+      text-align: left;
+      min-width: 78px;
+    }
+    .sum-light {
       background: ${ACCENT_LIGHT};
       color: ${ACCENT};
     }
-    .sum-box.emphasis {
+    .sum-dark {
       background: ${ACCENT};
       color: #fff;
-      min-width: 110px;
+      min-width: 96px;
     }
     .sum-label {
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       margin-bottom: 2px;
     }
     .sum-value {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
+      white-space: nowrap;
     }
-    .sum-box.emphasis .sum-value { font-size: 16px; }
+    .sum-dark .sum-value { font-size: 14px; }
     table.items {
       width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     table.items thead { display: table-header-group; }
     table.items th {
       text-align: left;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: ${TEXT};
-      padding: 6px 8px;
-      border-top: 2px solid ${ACCENT};
-      border-bottom: 2px solid ${ACCENT};
+      padding: 5px 6px;
+      border-top: 1.5px solid ${ACCENT};
+      border-bottom: 1.5px solid ${ACCENT};
       background: transparent;
     }
     table.items th.num,
     table.items td.num { text-align: right; white-space: nowrap; }
     table.items th.qty,
-    table.items td.qty { width: 48px; text-align: right; }
+    table.items td.qty { width: 40px; text-align: right; }
+    table.items th.activity { width: 26%; }
     table.items td {
-      padding: 8px;
+      padding: 7px 6px;
       vertical-align: top;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e8edf2;
+      font-size: 10.5px;
     }
     table.items tr { page-break-inside: avoid; }
     .activity { font-weight: 700; }
+    .desc { color: ${TEXT}; font-weight: 400; }
     .muted {
       color: #a0aec0;
       text-align: center;
-      padding: 18px 0 !important;
+      padding: 14px 0 !important;
       font-weight: 400;
     }
     .bottom {
-      display: flex;
-      justify-content: space-between;
-      gap: 24px;
-      margin-top: 12px;
-      align-items: flex-start;
+      width: 100%;
+      margin-top: 8px;
     }
-    .bottom-left {
-      flex: 1;
-      min-width: 0;
-    }
+    .bottom td { vertical-align: top; }
+    .bottom-left { width: 55%; padding-right: 16px; }
     .notes-block {
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       page-break-inside: avoid;
     }
     .notes-title {
       color: ${ACCENT};
       font-weight: 700;
-      font-size: 12px;
-      margin-bottom: 4px;
+      font-size: 11px;
+      margin-bottom: 3px;
     }
     .terms {
       color: ${MUTED};
-      font-size: 10px;
-      margin-top: 8px;
+      font-size: 9.5px;
+      margin-top: 6px;
       page-break-inside: avoid;
     }
+    .totals-wrap { width: 45%; }
     .totals {
-      width: 220px;
-      flex-shrink: 0;
+      width: 210px;
+      margin-left: auto;
     }
-    .tot-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 3px 0;
-      font-size: 11px;
+    .totals td {
+      padding: 2px 0;
+      font-size: 10.5px;
     }
-    .tot-row.total {
-      margin-top: 2px;
-      padding-top: 6px;
-    }
-    .tot-due {
-      margin-top: 6px;
+    .tot-label { text-align: left; color: ${TEXT}; }
+    .tot-val { text-align: right; white-space: nowrap; }
+    .tot-due-row td {
       padding-top: 8px;
+      padding-bottom: 8px;
       border-top: 1px solid ${ACCENT};
       border-bottom: 3px solid ${ACCENT};
-      padding-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
       color: ${ACCENT};
       font-weight: 700;
-      font-size: 13px;
-      page-break-inside: avoid;
+      font-size: 12px;
     }
     .thank-you {
-      margin-top: 10px;
+      margin-top: 8px;
       text-align: right;
       color: ${ACCENT};
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
     .sign-block {
-      margin-top: 36px;
+      margin-top: 28px;
       page-break-inside: avoid;
     }
     .sign-line {
-      margin-bottom: 14px;
-      font-size: 11px;
+      margin-bottom: 12px;
+      font-size: 10.5px;
     }
-    .sign-line .label { display: inline-block; min-width: 72px; }
+    .sign-line .label { display: inline-block; min-width: 68px; }
     .sign-line .blank {
       display: inline-block;
       border-bottom: 1px solid ${TEXT};
-      min-width: 220px;
+      min-width: 200px;
       height: 1em;
       vertical-align: bottom;
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="company">
-      ${businessName ? `<p class="company-name">${escapeHtml(businessName)}</p>` : ''}
-      ${businessMeta}
-    </div>
-    <div class="logo-wrap">${logoHtml}</div>
-    <div class="doc-title">${escapeHtml(quoteTitle)}</div>
-  </div>
+  <table class="header">
+    <tr>
+      <td class="company">
+        ${businessName ? `<p class="company-name">${escapeHtml(businessName)}</p>` : ''}
+        ${businessMeta}
+      </td>
+      <td class="logo-cell">${logoHtml}</td>
+      <td class="doc-title">${escapeHtml(quoteTitle)}</td>
+    </tr>
+  </table>
 
   <hr class="rule" />
 
-  <div class="meta-row">
-    <div class="parties">
-      <div class="party">
-        <div class="party-label">Bill to</div>
-        ${billToHtml}
-      </div>
-      <div class="party">
-        <div class="party-label">Ship to</div>
-        ${shipToHtml}
-      </div>
-    </div>
-    <div class="summary">
-      <div class="sum-box">
-        <div class="sum-label">Date</div>
-        <div class="sum-value">${quoteDate}</div>
-      </div>
-      <div class="sum-box emphasis">
-        <div class="sum-label">Quote total</div>
-        <div class="sum-value">${escapeHtml(formatCurrency(totals.grandTotal))}</div>
-      </div>
-    </div>
-  </div>
+  <table class="meta">
+    <tr>
+      <td class="parties">
+        <table class="party-table">
+          <tr>
+            <td>
+              <div class="party-label">Bill to</div>
+              <div class="party-body">${billToHtml}</div>
+            </td>
+            <td>
+              <div class="party-label">Ship to</div>
+              <div class="party-body">${shipToHtml}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td class="summary-wrap">
+        <table class="summary">
+          <tr>
+            <td class="sum-light">
+              <div class="sum-label">Date</div>
+              <div class="sum-value">${quoteDate}</div>
+            </td>
+            <td class="sum-dark">
+              <div class="sum-label">Quote total</div>
+              <div class="sum-value">${escapeHtml(formatCurrency(totals.grandTotal))}</div>
+            </td>
+            <td class="sum-light">
+              <div class="sum-label">Status</div>
+              <div class="sum-value">${escapeHtml(statusLabel)}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 
   <table class="items">
     <thead>
       <tr>
         <th class="qty">Qty</th>
-        <th>Activity</th>
+        <th class="activity">Activity</th>
+        <th>Description</th>
         <th class="num">Rate</th>
         <th class="num">Amount</th>
       </tr>
@@ -416,29 +437,36 @@ export function buildQuoteHtml(
     </tbody>
   </table>
 
-  <div class="bottom">
-    <div class="bottom-left">
-      ${notesHtml}
-      ${footerHtml}
-    </div>
-    <div class="totals">
-      <div class="tot-row"><span>Subtotal</span><span>${escapeHtml(
-        formatPlainAmount(totals.subtotal)
-      )}</span></div>
-      ${discountRow}
-      <div class="tot-row"><span>Tax</span><span>${escapeHtml(
-        formatPlainAmount(totals.tax)
-      )}</span></div>
-      <div class="tot-row total"><span>Total</span><span>${escapeHtml(
-        formatPlainAmount(totals.grandTotal)
-      )}</span></div>
-      <div class="tot-due">
-        <span>Total</span>
-        <span>${escapeHtml(formatCurrency(totals.grandTotal))}</span>
-      </div>
-      <div class="thank-you">Thank you.</div>
-    </div>
-  </div>
+  <table class="bottom">
+    <tr>
+      <td class="bottom-left">
+        ${notesHtml}
+        ${footerHtml}
+      </td>
+      <td class="totals-wrap">
+        <table class="totals">
+          <tr>
+            <td class="tot-label">Subtotal</td>
+            <td class="tot-val">${escapeHtml(formatPlainAmount(totals.subtotal))}</td>
+          </tr>
+          ${discountRow}
+          <tr>
+            <td class="tot-label">Tax</td>
+            <td class="tot-val">${escapeHtml(formatPlainAmount(totals.tax))}</td>
+          </tr>
+          <tr>
+            <td class="tot-label">Total</td>
+            <td class="tot-val">${escapeHtml(formatPlainAmount(totals.grandTotal))}</td>
+          </tr>
+          <tr class="tot-due-row">
+            <td class="tot-label">Total</td>
+            <td class="tot-val">${escapeHtml(formatCurrency(totals.grandTotal))}</td>
+          </tr>
+        </table>
+        <div class="thank-you">Thank you.</div>
+      </td>
+    </tr>
+  </table>
 
   <div class="sign-block">
     <div class="sign-line"><span class="label">Date:</span> <span class="blank"></span></div>

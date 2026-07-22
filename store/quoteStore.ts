@@ -158,6 +158,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           quoteId: quote.id,
           productId: product.id,
           nameSnapshot: product.name,
+          descriptionSnapshot: product.description?.trim() ?? '',
           priceSnapshot,
           quantity: 1,
         });

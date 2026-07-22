@@ -84,6 +84,8 @@ export interface QuoteItem {
   quoteId: string;
   productId: string;
   nameSnapshot: string;
+  /** Product description at add-time; shown on the quote PDF. */
+  descriptionSnapshot: string;
   priceSnapshot: number;
   quantity: number;
 }
