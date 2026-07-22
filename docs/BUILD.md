@@ -158,9 +158,13 @@ installed:
 1. Create a Sentry project and copy the DSN.
 2. Set `EXPO_PUBLIC_SENTRY_DSN` in EAS environment variables (and local `.env` for
    dev). The DSN is a public client value — safe in the bundle.
-3. For source map upload during EAS Build, also set either:
-   - plugin options in `app.json` (`organization`, `project`), or
-   - `SENTRY_ORG` / `SENTRY_PROJECT` plus sensitive `SENTRY_AUTH_TOKEN`
+3. Source map / debug-symbol **auto-upload is disabled** in `eas.json`
+   (`SENTRY_DISABLE_AUTO_UPLOAD=true`) so builds succeed without a Sentry org.
+   When you want symbolicated stack traces, remove that env from the profile(s)
+   you care about and set:
+   - `organization` + `project` on the `@sentry/react-native` plugin in `app.json`, or
+     `SENTRY_ORG` / `SENTRY_PROJECT`
+   - `SENTRY_AUTH_TOKEN` as a **sensitive** EAS secret
 4. Rebuild (or OTA if only the DSN env changed on an already-Sentry-capable
    binary).
 
