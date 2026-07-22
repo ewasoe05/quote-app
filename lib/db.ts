@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 
 import { CATALOG_SEEDED_KEY, DEFAULT_CATALOG } from './seed';
+import { clearAllProductAttachments } from './productFiles';
 import { calculateQuoteTotal, type QuoteListItem } from './quotes';
 import type {
   BusinessSettings,
@@ -10,6 +11,7 @@ import type {
   NewQuote,
   NewQuoteItem,
   Product,
+  ProductAttachment,
   ProductCategory,
   Quote,
   QuoteItem,
@@ -36,6 +38,7 @@ type ProductRow = {
   unit_price: number;
   labor_price: number;
   active: number;
+  attachments?: string | null;
 };
 
 type QuoteRow = {
@@ -62,6 +65,30 @@ type QuoteItemRow = {
   quantity: number;
 };
 
+function parseAttachments(raw: string | null | undefined): ProductAttachment[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (item): item is ProductAttachment =>
+          !!item &&
+          typeof item === 'object' &&
+          typeof (item as ProductAttachment).id === 'string' &&
+          typeof (item as ProductAttachment).fileName === 'string' &&
+          typeof (item as ProductAttachment).uri === 'string'
+      )
+      .map((item) => ({
+        id: item.id,
+        fileName: item.fileName,
+        uri: item.uri,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 function mapProduct(row: ProductRow): Product {
   return {
     id: row.id,
@@ -71,6 +98,7 @@ function mapProduct(row: ProductRow): Product {
     unitPrice: row.unit_price,
     laborPrice: row.labor_price,
     active: row.active === 1,
+    attachments: parseAttachments(row.attachments),
   };
 }
 
@@ -123,7 +151,8 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       description TEXT NOT NULL DEFAULT '',
       unit_price REAL NOT NULL DEFAULT 0,
       labor_price REAL NOT NULL DEFAULT 0,
-      active INTEGER NOT NULL DEFAULT 1
+      active INTEGER NOT NULL DEFAULT 1,
+      attachments TEXT NOT NULL DEFAULT '[]'
     );
 
     CREATE TABLE IF NOT EXISTS quotes (
@@ -177,6 +206,17 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   }
 
   await backfillQuoteNumbers(db);
+
+  const productColumns = await db.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(products)'
+  );
+
+  // Migrate older DBs that predate PDF literature attachments.
+  if (!productColumns.some((column) => column.name === 'attachments')) {
+    await db.execAsync(
+      `ALTER TABLE products ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'`
+    );
+  }
 
   return db;
 }
@@ -340,18 +380,21 @@ export async function createProduct(input: NewProduct): Promise<Product> {
   const product: Product = {
     id: createId(),
     ...input,
+    attachments: input.attachments ?? [],
   };
 
   await db.runAsync(
-    `INSERT INTO products (id, name, category, description, unit_price, labor_price, active)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO products (
+      id, name, category, description, unit_price, labor_price, active, attachments
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     product.id,
     product.name,
     product.category,
     product.description,
     product.unitPrice,
     product.laborPrice,
-    product.active ? 1 : 0
+    product.active ? 1 : 0,
+    JSON.stringify(product.attachments)
   );
 
   return product;
@@ -395,7 +438,8 @@ export async function updateProduct(
   const db = await getDatabase();
   await db.runAsync(
     `UPDATE products
-     SET name = ?, category = ?, description = ?, unit_price = ?, labor_price = ?, active = ?
+     SET name = ?, category = ?, description = ?, unit_price = ?, labor_price = ?,
+         active = ?, attachments = ?
      WHERE id = ?`,
     next.name,
     next.category,
@@ -403,6 +447,7 @@ export async function updateProduct(
     next.unitPrice,
     next.laborPrice,
     next.active ? 1 : 0,
+    JSON.stringify(next.attachments),
     id
   );
 
@@ -412,6 +457,9 @@ export async function updateProduct(
 export async function deleteProduct(id: string): Promise<boolean> {
   const db = await getDatabase();
   const result = await db.runAsync('DELETE FROM products WHERE id = ?', id);
+  if (result.changes > 0) {
+    await clearAllProductAttachments(id);
+  }
   return result.changes > 0;
 }
 

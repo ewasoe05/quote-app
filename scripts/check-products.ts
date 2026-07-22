@@ -16,6 +16,7 @@ function asProduct(
     unitPrice: 0,
     laborPrice: 0,
     active: true,
+    attachments: [],
     ...partial,
   };
 }

@@ -39,6 +39,13 @@ export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
   lost: 'Lost',
 };
 
+/** PDF picture / literature file stored with a catalog product. */
+export type ProductAttachment = {
+  id: string;
+  fileName: string;
+  uri: string;
+};
+
 export interface Product {
   id: string;
   name: string;
@@ -47,7 +54,14 @@ export interface Product {
   unitPrice: number;
   laborPrice: number;
   active: boolean;
+  /** Product pictures and literature as PDF files in app documents. */
+  attachments: ProductAttachment[];
 }
+
+export type NewProduct = Omit<Product, 'id' | 'attachments'> & {
+  attachments?: ProductAttachment[];
+};
+export type UpdateProduct = Partial<NewProduct>;
 
 export interface Quote {
   id: string;
@@ -73,9 +87,6 @@ export interface QuoteItem {
   priceSnapshot: number;
   quantity: number;
 }
-
-export type NewProduct = Omit<Product, 'id'>;
-export type UpdateProduct = Partial<NewProduct>;
 
 /** quoteNumber is allocated by the database, never supplied by callers. */
 export type NewQuote = Omit<Quote, 'id' | 'createdAt' | 'quoteNumber'> & {
