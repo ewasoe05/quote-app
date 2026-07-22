@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 
 import { CATALOG_SEEDED_KEY, DEFAULT_CATALOG } from './seed';
@@ -24,7 +25,7 @@ const DATABASE_NAME = 'quote-app.db';
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function createId(): string {
-  return crypto.randomUUID();
+  return Crypto.randomUUID();
 }
 
 type ProductRow = {
