@@ -34,6 +34,8 @@ type QuoteEditableFields = Partial<
     | 'techSignatureUri'
     | 'signedAt'
     | 'jobSitePhotoUri'
+    | 'followUpDate'
+    | 'isTemplate'
   >
 >;
 

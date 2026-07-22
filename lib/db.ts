@@ -18,6 +18,7 @@ import type {
   ProductKind,
   Quote,
   QuoteItem,
+  QuoteNoteEntry,
   QuoteStatus,
   UpdateProduct,
   UpdateQuote,
@@ -25,6 +26,7 @@ import type {
 } from './types';
 import { DEFAULT_BUSINESS_SETTINGS } from './types';
 import { normalizePackageComponents } from './products';
+import { normalizeFollowUpDate } from './quoteDocument';
 
 const DATABASE_NAME = 'quote-app.db';
 
@@ -70,6 +72,15 @@ type QuoteRow = {
   tech_signature_uri?: string | null;
   signed_at?: string | null;
   job_site_photo_uri?: string | null;
+  follow_up_date?: string | null;
+  is_template?: number | null;
+  created_at: string;
+};
+
+type QuoteNoteEntryRow = {
+  id: string;
+  quote_id: string;
+  body: string;
   created_at: string;
 };
 
@@ -170,6 +181,19 @@ function mapQuote(row: QuoteRow): Quote {
     jobSitePhotoUri: row.job_site_photo_uri?.trim()
       ? row.job_site_photo_uri.trim()
       : null,
+    followUpDate: row.follow_up_date?.trim()
+      ? row.follow_up_date.trim()
+      : null,
+    isTemplate: row.is_template === 1,
+    createdAt: row.created_at,
+  };
+}
+
+function mapQuoteNoteEntry(row: QuoteNoteEntryRow): QuoteNoteEntry {
+  return {
+    id: row.id,
+    quoteId: row.quote_id,
+    body: row.body,
     createdAt: row.created_at,
   };
 }
@@ -236,6 +260,8 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       tech_signature_uri TEXT,
       signed_at TEXT,
       job_site_photo_uri TEXT,
+      follow_up_date TEXT,
+      is_template INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -249,6 +275,14 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       quantity REAL NOT NULL DEFAULT 1,
       FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE,
       FOREIGN KEY (product_id) REFERENCES products(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS quote_note_entries (
+      id TEXT PRIMARY KEY NOT NULL,
+      quote_id TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -312,6 +346,26 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!quoteColumns.some((column) => column.name === 'job_site_photo_uri')) {
     await db.execAsync('ALTER TABLE quotes ADD COLUMN job_site_photo_uri TEXT');
   }
+  if (!quoteColumns.some((column) => column.name === 'follow_up_date')) {
+    await db.execAsync('ALTER TABLE quotes ADD COLUMN follow_up_date TEXT');
+  }
+  if (!quoteColumns.some((column) => column.name === 'is_template')) {
+    await db.execAsync(
+      'ALTER TABLE quotes ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0'
+    );
+  }
+
+  // Ensure timeline table exists on upgraded DBs (CREATE IF NOT EXISTS above
+  // only runs for brand-new installs when the whole exec block is fresh).
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS quote_note_entries (
+      id TEXT PRIMARY KEY NOT NULL,
+      quote_id TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
+    );
+  `);
 
   await backfillQuoteNumbers(db);
 
@@ -727,8 +781,8 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
         discount, discount_type, tax_rate, notes,
         valid_until, deposit, deposit_type, payment_terms,
         status_reason, customer_signature_uri, tech_signature_uri,
-        signed_at, job_site_photo_uri, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        signed_at, job_site_photo_uri, follow_up_date, is_template, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       quoteNumber,
       input.customerName,
@@ -749,6 +803,8 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
       input.techSignatureUri ?? null,
       input.signedAt ?? null,
       input.jobSitePhotoUri ?? null,
+      normalizeFollowUpDate(input.followUpDate) ?? null,
+      input.isTemplate ? 1 : 0,
       createdAt
     );
   });
@@ -774,6 +830,8 @@ export async function createQuote(input: NewQuote): Promise<Quote> {
     techSignatureUri: input.techSignatureUri ?? null,
     signedAt: input.signedAt ?? null,
     jobSitePhotoUri: input.jobSitePhotoUri ?? null,
+    followUpDate: normalizeFollowUpDate(input.followUpDate) ?? null,
+    isTemplate: Boolean(input.isTemplate),
     createdAt,
   };
 }
@@ -805,6 +863,14 @@ export async function updateQuote(
   const next: Quote = {
     ...existing,
     ...updates,
+    followUpDate:
+      updates.followUpDate !== undefined
+        ? normalizeFollowUpDate(updates.followUpDate)
+        : existing.followUpDate,
+    isTemplate:
+      updates.isTemplate !== undefined
+        ? Boolean(updates.isTemplate)
+        : existing.isTemplate,
   };
 
   const db = await getDatabase();
@@ -814,7 +880,7 @@ export async function updateQuote(
          discount = ?, discount_type = ?, tax_rate = ?, notes = ?,
          valid_until = ?, deposit = ?, deposit_type = ?, payment_terms = ?,
          status_reason = ?, customer_signature_uri = ?, tech_signature_uri = ?,
-         signed_at = ?, job_site_photo_uri = ?
+         signed_at = ?, job_site_photo_uri = ?, follow_up_date = ?, is_template = ?
      WHERE id = ?`,
     next.customerName,
     next.phone,
@@ -834,6 +900,8 @@ export async function updateQuote(
     next.techSignatureUri,
     next.signedAt,
     next.jobSitePhotoUri,
+    next.followUpDate,
+    next.isTemplate ? 1 : 0,
     id
   );
 
@@ -869,18 +937,31 @@ export async function getQuotesWithTotals(): Promise<QuoteListItem[]> {
  * Copy a quote and its line items into a new independent draft.
  * Snapshots are preserved; IDs and createdAt are fresh.
  */
-export async function duplicateQuote(sourceId: string): Promise<Quote> {
+export type DuplicateQuoteOptions = {
+  /** Clear customer fields for a blank customer on the copy. */
+  clearCustomer?: boolean;
+  /** Save the copy as a reusable template (no customer). */
+  asTemplate?: boolean;
+};
+
+export async function duplicateQuote(
+  sourceId: string,
+  options: DuplicateQuoteOptions = {}
+): Promise<Quote> {
   const source = await getQuoteById(sourceId);
   if (!source) {
     throw new Error('Quote not found');
   }
 
+  const clearCustomer = Boolean(options.clearCustomer || options.asTemplate);
+  const asTemplate = Boolean(options.asTemplate);
+
   const items = await getQuoteItemsByQuoteId(sourceId);
   const copy = await createQuote({
-    customerName: source.customerName,
-    phone: source.phone,
-    email: source.email,
-    address: source.address,
+    customerName: clearCustomer ? '' : source.customerName,
+    phone: clearCustomer ? '' : source.phone,
+    email: clearCustomer ? '' : source.email,
+    address: clearCustomer ? '' : source.address,
     status: 'draft',
     discount: source.discount,
     discountType: source.discountType,
@@ -895,6 +976,8 @@ export async function duplicateQuote(sourceId: string): Promise<Quote> {
     techSignatureUri: null,
     signedAt: null,
     jobSitePhotoUri: null,
+    followUpDate: null,
+    isTemplate: asTemplate,
   });
 
   for (const item of items) {
@@ -909,6 +992,61 @@ export async function duplicateQuote(sourceId: string): Promise<Quote> {
   }
 
   return copy;
+}
+
+/** Create a live draft quote from a saved template. */
+export async function createQuoteFromTemplate(
+  templateId: string
+): Promise<Quote> {
+  const template = await getQuoteById(templateId);
+  if (!template || !template.isTemplate) {
+    throw new Error('Template not found');
+  }
+  return duplicateQuote(templateId, { clearCustomer: true, asTemplate: false });
+}
+
+/** Save the current quote's line items/pricing as a new template. */
+export async function saveQuoteAsTemplate(sourceId: string): Promise<Quote> {
+  return duplicateQuote(sourceId, { asTemplate: true });
+}
+
+export async function addQuoteNoteEntry(
+  quoteId: string,
+  body: string
+): Promise<QuoteNoteEntry> {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    throw new Error('Note cannot be empty');
+  }
+  const db = await getDatabase();
+  const entry: QuoteNoteEntry = {
+    id: createId(),
+    quoteId,
+    body: trimmed,
+    createdAt: new Date().toISOString(),
+  };
+  await db.runAsync(
+    `INSERT INTO quote_note_entries (id, quote_id, body, created_at)
+     VALUES (?, ?, ?, ?)`,
+    entry.id,
+    entry.quoteId,
+    entry.body,
+    entry.createdAt
+  );
+  return entry;
+}
+
+export async function getQuoteNoteEntries(
+  quoteId: string
+): Promise<QuoteNoteEntry[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<QuoteNoteEntryRow>(
+    `SELECT * FROM quote_note_entries
+     WHERE quote_id = ?
+     ORDER BY created_at DESC`,
+    quoteId
+  );
+  return rows.map(mapQuoteNoteEntry);
 }
 
 // --- Quote items ---

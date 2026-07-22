@@ -128,6 +128,8 @@ and apply the update.
 | Quote + selected product literature (zipped with `fflate`) | OTA — pure JS zip, existing Share APIs |
 | Product packages/kits + cost/margin pricing helper | OTA — SQLite columns + JS expand on add |
 | Customer/tech signature (gesture pad → SVG), won/lost reason, job-site photo from library | OTA — no new native modules |
+| Follow-up dates, Due today badges/filters, activity timeline, quote templates | OTA — badge-only (no notifications) |
+| Local follow-up **notifications** (`expo-notifications`) | **New EAS build** if/when added |
 | Job-site photo **from camera** + updated photo/camera permission strings | **New EAS build** (`app.json` camera + Info.plist) then resume OTA |
 | New native module (`expo-*` that needs native code) | New EAS build + reinstall |
 | New iOS/Android permissions in `app.json` | New EAS build + reinstall |

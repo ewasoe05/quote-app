@@ -13,30 +13,28 @@ import QuoteCard from '@/components/QuoteCard';
 import { Text, View, useThemeColor } from '@/components/Themed';
 import {
   createQuote,
+  createQuoteFromTemplate,
   deleteQuote,
   duplicateQuote,
   getBusinessSettings,
   getQuotesWithTotals,
 } from '@/lib/db';
-import { validUntilFromDays } from '@/lib/quoteDocument';
 import { captureException } from '@/lib/monitoring';
-import type { QuoteListItem } from '@/lib/quotes';
+import { validUntilFromDays } from '@/lib/quoteDocument';
 import {
-  QUOTE_STATUSES,
-  QUOTE_STATUS_LABELS,
-  type QuoteStatus,
-} from '@/lib/types';
-
-type StatusFilter = 'all' | QuoteStatus;
-
-const FILTERS: StatusFilter[] = ['all', ...QUOTE_STATUSES];
+  filterQuoteList,
+  getQuoteListFilterLabel,
+  QUOTE_LIST_FILTERS,
+  type QuoteListFilter,
+  type QuoteListItem,
+} from '@/lib/quotes';
 
 export default function QuotesScreen() {
   const router = useRouter();
   const [quotes, setQuotes] = useState<QuoteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [listFilter, setListFilter] = useState<QuoteListFilter>('all');
   const tint = useThemeColor({}, 'tint');
   const background = useThemeColor({}, 'background');
   const fieldBg = useThemeColor(
@@ -64,10 +62,15 @@ export default function QuotesScreen() {
     }, [loadQuotes])
   );
 
-  const filteredQuotes = useMemo(() => {
-    if (statusFilter === 'all') return quotes;
-    return quotes.filter((quote) => quote.status === statusFilter);
-  }, [quotes, statusFilter]);
+  const filteredQuotes = useMemo(
+    () => filterQuoteList(quotes, listFilter),
+    [listFilter, quotes]
+  );
+
+  const dueTodayCount = useMemo(
+    () => filterQuoteList(quotes, 'due_today').length,
+    [quotes]
+  );
 
   const openQuote = useCallback(
     (quote: QuoteListItem) => {
@@ -76,31 +79,37 @@ export default function QuotesScreen() {
     [router]
   );
 
+  const blankQuoteFields = useCallback(async () => {
+    const business = await getBusinessSettings();
+    return {
+      customerName: '',
+      phone: '',
+      email: '',
+      address: '',
+      status: 'draft' as const,
+      discount: 0,
+      discountType: 'flat' as const,
+      taxRate: business.defaultTaxRate || 0,
+      notes: '',
+      validUntil: validUntilFromDays(business.defaultValidDays),
+      deposit: business.defaultDeposit || 0,
+      depositType: business.defaultDepositType || 'percent',
+      paymentTerms: business.defaultPaymentTerms || '',
+      statusReason: '',
+      customerSignatureUri: null,
+      techSignatureUri: null,
+      signedAt: null,
+      jobSitePhotoUri: null,
+      followUpDate: null,
+      isTemplate: false,
+    };
+  }, []);
+
   const handleNewQuote = useCallback(async () => {
     if (creating) return;
     setCreating(true);
     try {
-      const business = await getBusinessSettings();
-      const quote = await createQuote({
-        customerName: '',
-        phone: '',
-        email: '',
-        address: '',
-        status: 'draft',
-        discount: 0,
-        discountType: 'flat',
-        taxRate: business.defaultTaxRate || 0,
-        notes: '',
-        validUntil: validUntilFromDays(business.defaultValidDays),
-        deposit: business.defaultDeposit || 0,
-        depositType: business.defaultDepositType || 'percent',
-        paymentTerms: business.defaultPaymentTerms || '',
-        statusReason: '',
-        customerSignatureUri: null,
-        techSignatureUri: null,
-        signedAt: null,
-        jobSitePhotoUri: null,
-      });
+      const quote = await createQuote(await blankQuoteFields());
       router.push({ pathname: '/quote/[id]', params: { id: quote.id } });
     } catch (err) {
       captureException(err, { action: 'create-quote' });
@@ -111,19 +120,39 @@ export default function QuotesScreen() {
     } finally {
       setCreating(false);
     }
-  }, [creating, router]);
+  }, [blankQuoteFields, creating, router]);
 
   const handleDuplicate = useCallback(
-    async (quote: QuoteListItem) => {
+    async (quote: QuoteListItem, clearCustomer = false) => {
       try {
-        const copy = await duplicateQuote(quote.id);
+        const copy = await duplicateQuote(quote.id, { clearCustomer });
         await loadQuotes();
         router.push({ pathname: '/quote/[id]', params: { id: copy.id } });
       } catch (err) {
-        captureException(err, { action: 'duplicate-quote', quoteId: quote.id });
+        captureException(err, {
+          action: clearCustomer ? 'duplicate-new-customer' : 'duplicate-quote',
+          quoteId: quote.id,
+        });
         Alert.alert(
           'Duplicate failed',
           err instanceof Error ? err.message : 'Could not duplicate quote.'
+        );
+      }
+    },
+    [loadQuotes, router]
+  );
+
+  const handleUseTemplate = useCallback(
+    async (quote: QuoteListItem) => {
+      try {
+        const created = await createQuoteFromTemplate(quote.id);
+        await loadQuotes();
+        router.push({ pathname: '/quote/[id]', params: { id: created.id } });
+      } catch (err) {
+        captureException(err, { action: 'use-template', quoteId: quote.id });
+        Alert.alert(
+          'Could not use template',
+          err instanceof Error ? err.message : 'Something went wrong.'
         );
       }
     },
@@ -143,12 +172,23 @@ export default function QuotesScreen() {
     }
   }, []);
 
-  const isEmpty = !loading && quotes.length === 0;
-  const filterEmpty = !loading && !isEmpty && filteredQuotes.length === 0;
+  const isEmpty = !loading && quotes.filter((q) => !q.isTemplate).length === 0;
+  const filterEmpty = !loading && filteredQuotes.length === 0;
 
   return (
     <View style={[styles.container, { backgroundColor: background }]}>
       <View style={styles.headerBar} lightColor="transparent" darkColor="transparent">
+        {dueTodayCount > 0 ? (
+          <Pressable
+            onPress={() => setListFilter('due_today')}
+            style={[styles.dueBadge, { backgroundColor: fieldBg, borderColor }]}>
+            <Text style={[styles.dueBadgeText, { color: tint }]}>
+              {dueTodayCount} due today
+            </Text>
+          </Pressable>
+        ) : (
+          <View />
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New quote"
@@ -167,43 +207,39 @@ export default function QuotesScreen() {
         </Pressable>
       </View>
 
-      {!isEmpty ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}>
-          {FILTERS.map((filter) => {
-            const selected = statusFilter === filter;
-            const label =
-              filter === 'all' ? 'All' : QUOTE_STATUS_LABELS[filter];
-            return (
-              <Pressable
-                key={filter}
-                onPress={() => setStatusFilter(filter)}
-                style={[
-                  styles.filterChip,
-                  {
-                    borderColor: selected ? tint : borderColor,
-                    backgroundColor: selected ? tint : fieldBg,
-                  },
-                ]}>
-                <Text
-                  style={styles.filterChipText}
-                  lightColor={selected ? '#fff' : '#111'}
-                  darkColor={selected ? '#000' : '#fff'}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filters}>
+        {QUOTE_LIST_FILTERS.map((filter) => {
+          const selected = listFilter === filter;
+          return (
+            <Pressable
+              key={filter}
+              onPress={() => setListFilter(filter)}
+              style={[
+                styles.filterChip,
+                {
+                  borderColor: selected ? tint : borderColor,
+                  backgroundColor: selected ? tint : fieldBg,
+                },
+              ]}>
+              <Text
+                style={styles.filterChipText}
+                lightColor={selected ? '#fff' : '#111'}
+                darkColor={selected ? '#000' : '#fff'}>
+                {getQuoteListFilterLabel(filter)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={tint} />
         </View>
-      ) : isEmpty ? (
+      ) : isEmpty && listFilter === 'all' ? (
         <View style={styles.centered}>
           <Text style={styles.emptyTitle}>No quotes yet</Text>
           <Text style={styles.emptySubtitle}>
@@ -214,7 +250,7 @@ export default function QuotesScreen() {
         <View style={styles.centered}>
           <Text style={styles.emptyTitle}>No matching quotes</Text>
           <Text style={styles.emptySubtitle}>
-            Try another status filter, or create a new quote.
+            Try another filter, open Templates, or create a new quote.
           </Text>
         </View>
       ) : (
@@ -226,7 +262,13 @@ export default function QuotesScreen() {
               quote={item}
               onPress={openQuote}
               onDuplicate={(quote) => {
-                void handleDuplicate(quote);
+                void handleDuplicate(quote, false);
+              }}
+              onDuplicateNewCustomer={(quote) => {
+                void handleDuplicate(quote, true);
+              }}
+              onUseTemplate={(quote) => {
+                void handleUseTemplate(quote);
               }}
               onDelete={(quote) => {
                 void handleDelete(quote);
@@ -248,7 +290,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  dueBadge: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  dueBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   newButton: {
     borderRadius: 10,

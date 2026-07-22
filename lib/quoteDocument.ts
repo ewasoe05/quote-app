@@ -30,6 +30,27 @@ export function normalizeValidUntil(value: string | null | undefined): string | 
   return trimmed;
 }
 
+/** Alias — follow-up dates use the same yyyy-mm-dd rules. */
+export const normalizeFollowUpDate = normalizeValidUntil;
+
+/** True when follow-up is set and on/before local today. */
+export function isFollowUpDue(
+  followUpDate: string | null | undefined,
+  today = toDateInputValue(new Date())
+): boolean {
+  const date = normalizeFollowUpDate(followUpDate);
+  if (!date) return false;
+  return date <= today;
+}
+
+export function isFollowUpDueToday(
+  followUpDate: string | null | undefined,
+  today = toDateInputValue(new Date())
+): boolean {
+  const date = normalizeFollowUpDate(followUpDate);
+  return date === today;
+}
+
 /** Deposit dollars from grand total + deposit fields. */
 export function calcDepositAmount(
   grandTotal: number,

@@ -24,14 +24,21 @@ import SignatureCaptureModal from '@/components/SignatureCaptureModal';
 import { Text, View, useThemeColor } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
 import { calcQuoteTotals } from '@/lib/calc';
-import { getBusinessSettings } from '@/lib/db';
+import {
+  addQuoteNoteEntry,
+  getBusinessSettings,
+  getQuoteNoteEntries,
+  saveQuoteAsTemplate,
+} from '@/lib/db';
 import { captureException } from '@/lib/monitoring';
 import { shareQuotePdf } from '@/lib/pdf';
 import { formatCurrency } from '@/lib/products';
 import {
   mapsUrlForAddress,
+  normalizeFollowUpDate,
   normalizeValidUntil,
   telUrlForPhone,
+  toDateInputValue,
 } from '@/lib/quoteDocument';
 import {
   clearQuoteFile,
@@ -44,7 +51,12 @@ import {
 } from '@/lib/quoteLiterature';
 import { formatQuoteDate, formatQuoteNumber } from '@/lib/quotes';
 import type { SignatureDrawing } from '@/lib/signature';
-import type { DiscountType, Product, QuoteStatus } from '@/lib/types';
+import type {
+  DiscountType,
+  Product,
+  QuoteNoteEntry,
+  QuoteStatus,
+} from '@/lib/types';
 import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from '@/lib/types';
 import { useQuoteStore } from '@/store/quoteStore';
 
@@ -90,6 +102,10 @@ export default function QuoteBuilderScreen() {
   const [taxText, setTaxText] = useState('0');
   const [depositText, setDepositText] = useState('0');
   const [validUntilText, setValidUntilText] = useState('');
+  const [followUpText, setFollowUpText] = useState('');
+  const [timelineEntries, setTimelineEntries] = useState<QuoteNoteEntry[]>([]);
+  const [timelineDraft, setTimelineDraft] = useState('');
+  const [timelineBusy, setTimelineBusy] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [literatureSheetOpen, setLiteratureSheetOpen] = useState(false);
   const [literatureOptions, setLiteratureOptions] = useState<
@@ -144,7 +160,29 @@ export default function QuoteBuilderScreen() {
     setTaxText(String(quote.taxRate ?? 0));
     setDepositText(String(quote.deposit ?? 0));
     setValidUntilText(quote.validUntil ?? '');
-  }, [quote?.id, quote?.discount, quote?.taxRate, quote?.deposit, quote?.validUntil]);
+    setFollowUpText(quote.followUpDate ?? '');
+  }, [
+    quote?.id,
+    quote?.discount,
+    quote?.taxRate,
+    quote?.deposit,
+    quote?.validUntil,
+    quote?.followUpDate,
+  ]);
+
+  const loadTimeline = useCallback(async () => {
+    if (!quoteId) return;
+    try {
+      const rows = await getQuoteNoteEntries(quoteId);
+      setTimelineEntries(rows);
+    } catch {
+      setTimelineEntries([]);
+    }
+  }, [quoteId]);
+
+  useEffect(() => {
+    void loadTimeline();
+  }, [loadTimeline]);
 
   const totals = useMemo(() => {
     if (!quote) {
@@ -328,6 +366,78 @@ export default function QuoteBuilderScreen() {
     setValidUntilText(next ?? '');
     updateQuoteFields({ validUntil: next });
     void flush();
+  };
+
+  const commitFollowUp = () => {
+    const next = normalizeFollowUpDate(followUpText);
+    setFollowUpText(next ?? '');
+    updateQuoteFields({ followUpDate: next });
+    void flush();
+  };
+
+  const addTimelineNote = async () => {
+    if (!quote || timelineBusy) return;
+    const body = timelineDraft.trim();
+    if (!body) return;
+    setTimelineBusy(true);
+    try {
+      const entry = await addQuoteNoteEntry(quote.id, body);
+      setTimelineEntries((current) => [entry, ...current]);
+      setTimelineDraft('');
+    } catch (err) {
+      Alert.alert(
+        'Could not add note',
+        err instanceof Error ? err.message : 'Something went wrong.'
+      );
+    } finally {
+      setTimelineBusy(false);
+    }
+  };
+
+  const handleSaveAsTemplate = () => {
+    if (!quote) return;
+    Alert.alert(
+      'Save as template?',
+      'Creates a reusable template with these line items and pricing (no customer).',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save template',
+          onPress: () => {
+            void (async () => {
+              try {
+                await flush();
+                const template = await saveQuoteAsTemplate(quote.id);
+                Alert.alert(
+                  'Template saved',
+                  'Find it under the Templates filter on the Quotes tab.',
+                  [
+                    {
+                      text: 'Open template',
+                      onPress: () =>
+                        router.replace({
+                          pathname: '/quote/[id]',
+                          params: { id: template.id },
+                        }),
+                    },
+                    { text: 'OK' },
+                  ]
+                );
+              } catch (err) {
+                captureException(err, {
+                  action: 'save-template',
+                  quoteId: quote.id,
+                });
+                Alert.alert(
+                  'Could not save template',
+                  err instanceof Error ? err.message : 'Something went wrong.'
+                );
+              }
+            })();
+          },
+        },
+      ]
+    );
   };
 
   const setDiscountType = (discountType: DiscountType) => {
@@ -524,7 +634,9 @@ export default function QuoteBuilderScreen() {
     );
   }
 
-  const title = quote.customerName.trim() || 'New Quote';
+  const title = quote.isTemplate
+    ? quote.notes.trim() || quote.customerName.trim() || 'Template'
+    : quote.customerName.trim() || 'New Quote';
   const quoteRef = formatQuoteNumber(quote.quoteNumber);
 
   return (
@@ -980,10 +1092,48 @@ export default function QuoteBuilderScreen() {
               { color: textColor, backgroundColor: background, borderColor },
             ]}
           />
+
+          <FieldLabel>Follow-up date (YYYY-MM-DD)</FieldLabel>
+          <TextInput
+            value={followUpText}
+            onChangeText={setFollowUpText}
+            onBlur={commitFollowUp}
+            onSubmitEditing={commitFollowUp}
+            placeholder={toDateInputValue(new Date())}
+            placeholderTextColor="#999"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[
+              formStyles.input,
+              { color: textColor, backgroundColor: background, borderColor },
+            ]}
+          />
+          <Text style={styles.notesHint}>
+            Badge-only reminders on the Quotes list (Due today / Needs
+            follow-up). Local notifications would need a native rebuild later.
+          </Text>
+          {!quote.isTemplate ? (
+            <Pressable
+              onPress={handleSaveAsTemplate}
+              style={({ pressed }) => [
+                styles.miniBtn,
+                { borderColor: tint, alignSelf: 'flex-start', marginTop: 4 },
+                pressed && formStyles.pressed,
+              ]}>
+              <Text style={[styles.miniBtnText, { color: tint }]}>
+                Save as template
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.notesHint, { color: tint }]}>
+              This is a template. Use “New quote from template” on the Quotes
+              tab to start a customer quote.
+            </Text>
+          )}
         </View>
 
         <View style={styles.notesBlock} lightColor="transparent" darkColor="transparent">
-          <Text style={styles.sectionTitle}>Notes</Text>
+          <Text style={styles.sectionTitle}>PDF notes</Text>
           <Text style={styles.notesHint}>
             Shown on the quote PDF, above your terms.
           </Text>
@@ -993,7 +1143,7 @@ export default function QuoteBuilderScreen() {
             onBlur={() => {
               void flush();
             }}
-            placeholder="Scope, access notes, timeline, exclusions…"
+            placeholder="Scope, access notes, exclusions…"
             placeholderTextColor="#999"
             multiline
             textAlignVertical="top"
@@ -1003,6 +1153,61 @@ export default function QuoteBuilderScreen() {
               { color: textColor, backgroundColor: fieldBg, borderColor },
             ]}
           />
+        </View>
+
+        <View style={styles.notesBlock} lightColor="transparent" darkColor="transparent">
+          <Text style={styles.sectionTitle}>Activity timeline</Text>
+          <Text style={styles.notesHint}>
+            Append-only internal notes (not printed on the PDF).
+          </Text>
+          <TextInput
+            value={timelineDraft}
+            onChangeText={setTimelineDraft}
+            placeholder="Called customer, left voicemail…"
+            placeholderTextColor="#999"
+            multiline
+            textAlignVertical="top"
+            style={[
+              formStyles.input,
+              styles.timelineInput,
+              { color: textColor, backgroundColor: fieldBg, borderColor },
+            ]}
+          />
+          <Pressable
+            disabled={timelineBusy || !timelineDraft.trim()}
+            onPress={() => {
+              void addTimelineNote();
+            }}
+            style={({ pressed }) => [
+              styles.miniBtn,
+              {
+                borderColor: tint,
+                alignSelf: 'flex-start',
+                opacity: timelineBusy || !timelineDraft.trim() ? 0.45 : 1,
+              },
+              pressed && formStyles.pressed,
+            ]}>
+            <Text style={[styles.miniBtnText, { color: tint }]}>
+              {timelineBusy ? 'Adding…' : 'Add note'}
+            </Text>
+          </Pressable>
+          {timelineEntries.length === 0 ? (
+            <Text style={styles.emptyTimeline}>No activity notes yet.</Text>
+          ) : (
+            timelineEntries.map((entry) => (
+              <View
+                key={entry.id}
+                style={[
+                  styles.timelineRow,
+                  { backgroundColor: fieldBg, borderColor },
+                ]}>
+                <Text style={styles.timelineWhen}>
+                  {formatQuoteDate(entry.createdAt)}
+                </Text>
+                <Text style={styles.timelineBody}>{entry.body}</Text>
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -1408,6 +1613,33 @@ const styles = StyleSheet.create({
     minHeight: 110,
     paddingTop: 14,
     textAlignVertical: 'top',
+  },
+  timelineInput: {
+    minHeight: 72,
+    paddingTop: 14,
+    textAlignVertical: 'top',
+    marginBottom: 8,
+  },
+  emptyTimeline: {
+    fontSize: 13,
+    opacity: 0.55,
+    marginTop: 8,
+  },
+  timelineRow: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    gap: 4,
+  },
+  timelineWhen: {
+    fontSize: 12,
+    opacity: 0.55,
+    fontWeight: '600',
+  },
+  timelineBody: {
+    fontSize: 14,
+    lineHeight: 20,
   },
   stickyBar: {
     position: 'absolute',

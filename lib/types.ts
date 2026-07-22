@@ -118,6 +118,18 @@ export interface Quote {
   signedAt: string | null;
   /** Local file URI for optional job-site photo. */
   jobSitePhotoUri: string | null;
+  /** ISO date (yyyy-mm-dd) for next follow-up; null if unset. */
+  followUpDate: string | null;
+  /** Template quotes hide from the default list and have no customer. */
+  isTemplate: boolean;
+  createdAt: string;
+}
+
+/** Append-only internal CRM note (separate from PDF `notes`). */
+export interface QuoteNoteEntry {
+  id: string;
+  quoteId: string;
+  body: string;
   createdAt: string;
 }
 

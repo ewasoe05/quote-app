@@ -27,6 +27,8 @@ const quote: Quote = {
   techSignatureUri: null,
   signedAt: null,
   jobSitePhotoUri: null,
+  followUpDate: null,
+  isTemplate: false,
   createdAt: '2026-07-20T12:00:00.000Z',
 };
 

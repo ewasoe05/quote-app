@@ -4,6 +4,11 @@ import { Swipeable } from 'react-native-gesture-handler';
 
 import { Text, View } from '@/components/Themed';
 import {
+  isFollowUpDue,
+  isFollowUpDueToday,
+  toDateInputValue,
+} from '@/lib/quoteDocument';
+import {
   formatQuoteDate,
   formatQuoteNumber,
   formatQuoteTotal,
@@ -16,6 +21,8 @@ type QuoteCardProps = {
   quote: QuoteListItem;
   onPress: (quote: QuoteListItem) => void;
   onDuplicate: (quote: QuoteListItem) => void;
+  onDuplicateNewCustomer: (quote: QuoteListItem) => void;
+  onUseTemplate: (quote: QuoteListItem) => void;
   onDelete: (quote: QuoteListItem) => void;
 };
 
@@ -33,18 +40,28 @@ export default function QuoteCard({
   quote,
   onPress,
   onDuplicate,
+  onDuplicateNewCustomer,
+  onUseTemplate,
   onDelete,
 }: QuoteCardProps) {
   const swipeableRef = useRef<Swipeable>(null);
   const statusColors = STATUS_COLORS[quote.status] ?? STATUS_COLORS.draft;
-  const customerLabel = quote.customerName.trim() || 'Untitled quote';
+  const customerLabel = quote.isTemplate
+    ? quote.notes.trim() || quote.customerName.trim() || 'Untitled template'
+    : quote.customerName.trim() || 'Untitled quote';
   const quoteRef = formatQuoteNumber(quote.quoteNumber);
+  const today = toDateInputValue(new Date());
+  const dueToday = isFollowUpDueToday(quote.followUpDate, today);
+  const needsFollowUp =
+    !quote.isTemplate && isFollowUpDue(quote.followUpDate, today);
 
   const confirmDelete = () => {
     swipeableRef.current?.close();
     Alert.alert(
-      'Delete quote?',
-      `Remove the quote for “${customerLabel}”? Line items will be deleted too.`,
+      quote.isTemplate ? 'Delete template?' : 'Delete quote?',
+      quote.isTemplate
+        ? `Remove “${customerLabel}” from templates?`
+        : `Remove the quote for “${customerLabel}”? Line items will be deleted too.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -56,22 +73,48 @@ export default function QuoteCard({
     );
   };
 
-  const handleDuplicate = () => {
-    swipeableRef.current?.close();
-    onDuplicate(quote);
-  };
-
   const openActions = () => {
-    Alert.alert(customerLabel, undefined, [
-      { text: 'Open', onPress: () => onPress(quote) },
-      { text: 'Duplicate', onPress: handleDuplicate },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: confirmDelete,
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    const buttons = quote.isTemplate
+      ? [
+          { text: 'Open', onPress: () => onPress(quote) },
+          {
+            text: 'New quote from template',
+            onPress: () => {
+              swipeableRef.current?.close();
+              onUseTemplate(quote);
+            },
+          },
+          {
+            text: 'Delete',
+            style: 'destructive' as const,
+            onPress: confirmDelete,
+          },
+          { text: 'Cancel', style: 'cancel' as const },
+        ]
+      : [
+          { text: 'Open', onPress: () => onPress(quote) },
+          {
+            text: 'Duplicate',
+            onPress: () => {
+              swipeableRef.current?.close();
+              onDuplicate(quote);
+            },
+          },
+          {
+            text: 'Duplicate as new customer',
+            onPress: () => {
+              swipeableRef.current?.close();
+              onDuplicateNewCustomer(quote);
+            },
+          },
+          {
+            text: 'Delete',
+            style: 'destructive' as const,
+            onPress: confirmDelete,
+          },
+          { text: 'Cancel', style: 'cancel' as const },
+        ];
+    Alert.alert(customerLabel, undefined, buttons);
   };
 
   const renderRightActions = (
@@ -86,10 +129,16 @@ export default function QuoteCard({
 
     return (
       <View style={styles.actions} lightColor="transparent" darkColor="transparent">
-        <Pressable onPress={handleDuplicate} style={styles.duplicateAction}>
+        <Pressable
+          onPress={() => {
+            swipeableRef.current?.close();
+            if (quote.isTemplate) onUseTemplate(quote);
+            else onDuplicate(quote);
+          }}
+          style={styles.duplicateAction}>
           <Animated.Text
             style={[styles.actionText, { transform: [{ scale }] }]}>
-            Duplicate
+            {quote.isTemplate ? 'Use' : 'Duplicate'}
           </Animated.Text>
         </Pressable>
         <Pressable onPress={confirmDelete} style={styles.deleteAction}>
@@ -121,19 +170,42 @@ export default function QuoteCard({
             <Text style={styles.name} numberOfLines={1}>
               {customerLabel}
             </Text>
-            <View
-              style={[styles.badge, { backgroundColor: statusColors.bg }]}
-              lightColor="transparent"
-              darkColor="transparent">
-              <Text style={[styles.badgeText, { color: statusColors.text }]}>
-                {getQuoteStatusLabel(quote.status)}
-              </Text>
+            <View style={styles.badges} lightColor="transparent" darkColor="transparent">
+              {quote.isTemplate ? (
+                <View style={[styles.badge, styles.templateBadge]}>
+                  <Text style={[styles.badgeText, { color: '#5b4bb7' }]}>
+                    Template
+                  </Text>
+                </View>
+              ) : (
+                <View
+                  style={[styles.badge, { backgroundColor: statusColors.bg }]}>
+                  <Text style={[styles.badgeText, { color: statusColors.text }]}>
+                    {getQuoteStatusLabel(quote.status)}
+                  </Text>
+                </View>
+              )}
+              {dueToday ? (
+                <View style={[styles.badge, styles.dueBadge]}>
+                  <Text style={[styles.badgeText, { color: '#b35b00' }]}>
+                    Due today
+                  </Text>
+                </View>
+              ) : needsFollowUp ? (
+                <View style={[styles.badge, styles.overdueBadge]}>
+                  <Text style={[styles.badgeText, { color: '#d11a2a' }]}>
+                    Follow up
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
           <View style={styles.bottomRow} lightColor="transparent" darkColor="transparent">
             <Text style={styles.meta}>
               {quoteRef ? `${quoteRef} · ` : ''}
-              {formatQuoteDate(quote.createdAt)}
+              {quote.followUpDate && !quote.isTemplate
+                ? `Follow-up ${quote.followUpDate}`
+                : formatQuoteDate(quote.createdAt)}
             </Text>
             <Text style={styles.total}>{formatQuoteTotal(quote.total)}</Text>
           </View>
@@ -159,7 +231,7 @@ const styles = StyleSheet.create({
   },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
   },
@@ -168,10 +240,26 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
+  badges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'flex-end',
+    maxWidth: '48%',
+  },
   badge: {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
+  },
+  templateBadge: {
+    backgroundColor: 'rgba(91,75,183,0.16)',
+  },
+  dueBadge: {
+    backgroundColor: 'rgba(255,149,0,0.18)',
+  },
+  overdueBadge: {
+    backgroundColor: 'rgba(209,26,42,0.14)',
   },
   badgeText: {
     fontSize: 12,
@@ -183,8 +271,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   meta: {
+    flex: 1,
     fontSize: 14,
     opacity: 0.6,
+    marginRight: 8,
   },
   total: {
     fontSize: 16,
