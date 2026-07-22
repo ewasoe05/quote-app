@@ -152,16 +152,20 @@ Always ship a new binary after native changes, then resume OTA from that build.
 `captureException()` / `addBreadcrumb()` no-op until a DSN is present, so builds
 without Sentry credentials stay quiet.
 
-**Requires a new EAS build** once (native Sentry module + Metro Debug IDs). After
-that binary is installed:
+**Requires a new EAS build** once (native Sentry module). After that binary is
+installed:
 
 1. Create a Sentry project and copy the DSN.
 2. Set `EXPO_PUBLIC_SENTRY_DSN` in EAS environment variables (and local `.env` for
    dev). The DSN is a public client value — safe in the bundle.
-3. Set `SENTRY_AUTH_TOKEN` as a **sensitive** EAS secret for source map upload —
-   never commit it.
+3. For source map upload during EAS Build, also set either:
+   - plugin options in `app.json` (`organization`, `project`), or
+   - `SENTRY_ORG` / `SENTRY_PROJECT` plus sensitive `SENTRY_AUTH_TOKEN`
 4. Rebuild (or OTA if only the DSN env changed on an already-Sentry-capable
    binary).
+
+Metro must use `getSentryExpoConfig` from `@sentry/react-native/metro` (not
+`withSentryConfig`) so EAS `expo export:embed` succeeds.
 
 `sendDefaultPii` is off. Do not put customer names, phones, addresses, or quote
 bodies in `captureException` extras — use operational stages only
