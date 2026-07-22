@@ -5,6 +5,11 @@ import { Platform, Share } from 'react-native';
 
 import { buildQuoteShareMessage } from './quoteDocument';
 import {
+  createQuoteShareBundle,
+  sweepShareBundleCache,
+  type QuoteLiteratureOption,
+} from './quoteLiterature';
+import {
   buildQuoteHtml,
   type QuotePdfInput,
 } from './pdfTemplate';
@@ -84,34 +89,56 @@ export async function createQuotePdfFile(
   return { uri: file.uri, html };
 }
 
+export type ShareQuotePdfOptions = {
+  /** Product literature PDFs selected by the user (may be empty). */
+  literature?: QuoteLiteratureOption[];
+};
+
 /**
- * Renders the quote PDF and opens the native share sheet with a ready message.
+ * Renders the quote PDF (and optional literature zip) and opens the share sheet.
  *
  * On iOS, the share sheet can dismiss via cancel — callers must not treat
  * resolution as proof the PDF was sent.
  */
 export async function shareQuotePdf(
-  input: QuotePdfInput
-): Promise<{ uri: string }> {
-  const { uri } = await createQuotePdfFile(input);
+  input: QuotePdfInput,
+  options: ShareQuotePdfOptions = {}
+): Promise<{ uri: string; isBundle: boolean }> {
+  const literature = options.literature ?? [];
+  const { uri: quotePdfUri } = await createQuotePdfFile(input);
+  const bundle = await createQuoteShareBundle({
+    quotePdfUri,
+    quoteNumber: input.quote.quoteNumber,
+    literature,
+  });
+
+  if (bundle.isBundle) {
+    sweepShareBundleCache(bundle.uri);
+  }
+
   const message = buildQuoteShareMessage({
     quote: input.quote,
     items: input.items,
     businessName: input.business.businessName,
+    literatureCount: literature.length,
   });
   const businessName = input.business.businessName.trim() || 'Quote';
   const customerName = input.quote.customerName.trim() || 'customer';
   const dialogTitle = `Share quote for ${customerName} (${businessName})`;
 
-  // Prefer RN Share so iOS/Android get a message body with the PDF.
+  // Prefer RN Share so iOS/Android get a message body with the file.
   try {
     await Share.share(
       Platform.OS === 'ios'
-        ? { url: uri, message, title: dialogTitle }
-        : { url: uri, message: `${message}\n\n${uri}`, title: dialogTitle },
+        ? { url: bundle.uri, message, title: dialogTitle }
+        : {
+            url: bundle.uri,
+            message: `${message}\n\n${bundle.uri}`,
+            title: dialogTitle,
+          },
       { dialogTitle, subject: dialogTitle }
     );
-    return { uri };
+    return { uri: bundle.uri, isBundle: bundle.isBundle };
   } catch {
     // Fall through to expo-sharing if the system share path fails.
   }
@@ -121,11 +148,11 @@ export async function shareQuotePdf(
     throw new Error('Sharing is not available on this device.');
   }
 
-  await Sharing.shareAsync(uri, {
-    mimeType: 'application/pdf',
-    UTI: 'com.adobe.pdf',
+  await Sharing.shareAsync(bundle.uri, {
+    mimeType: bundle.mimeType,
+    UTI: bundle.uti,
     dialogTitle,
   });
 
-  return { uri };
+  return { uri: bundle.uri, isBundle: bundle.isBundle };
 }

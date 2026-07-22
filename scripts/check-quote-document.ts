@@ -78,4 +78,12 @@ assert.match(message, /Valid through/);
 assert.match(message, /Deposit to schedule: \$500\.00/);
 assert.match(message, /PDF attached/);
 
+const withLit = buildQuoteShareMessage({
+  quote,
+  items,
+  businessName: 'Clear Water Co',
+  literatureCount: 1,
+});
+assert.match(withLit, /product literature attached/);
+
 console.log('quote document checks passed');

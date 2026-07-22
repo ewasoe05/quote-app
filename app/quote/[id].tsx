@@ -14,6 +14,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 
 import KeyboardForm from '@/components/KeyboardForm';
 import LineItemRow from '@/components/LineItemRow';
+import LiteratureShareSheet from '@/components/LiteratureShareSheet';
 import ProductPicker from '@/components/ProductPicker';
 import { Text, View, useThemeColor } from '@/components/Themed';
 import { formStyles } from '@/constants/Form';
@@ -27,6 +28,10 @@ import {
   normalizeValidUntil,
   telUrlForPhone,
 } from '@/lib/quoteDocument';
+import {
+  listQuoteLiterature,
+  type QuoteLiteratureOption,
+} from '@/lib/quoteLiterature';
 import { formatQuoteDate, formatQuoteNumber } from '@/lib/quotes';
 import type { DiscountType, Product, QuoteStatus } from '@/lib/types';
 import { QUOTE_STATUSES, QUOTE_STATUS_LABELS } from '@/lib/types';
@@ -75,6 +80,11 @@ export default function QuoteBuilderScreen() {
   const [depositText, setDepositText] = useState('0');
   const [validUntilText, setValidUntilText] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [literatureSheetOpen, setLiteratureSheetOpen] = useState(false);
+  const [literatureOptions, setLiteratureOptions] = useState<
+    QuoteLiteratureOption[]
+  >([]);
+  const [literatureLoading, setLiteratureLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -169,48 +179,79 @@ export default function QuoteBuilderScreen() {
     validUntilText,
   ]);
 
+  const finishShare = useCallback(
+    async (literature: QuoteLiteratureOption[]) => {
+      if (!quote) return;
+      setSharing(true);
+      try {
+        await flush();
+        const business = await getBusinessSettings();
+        await shareQuotePdf(
+          {
+            quote: useQuoteStore.getState().quote ?? quote,
+            items: useQuoteStore.getState().items,
+            business,
+          },
+          { literature }
+        );
+        setLiteratureSheetOpen(false);
+        // iOS share sheet resolves on dismiss (including cancel), so ask before
+        // flipping status — do not infer that the PDF was actually sent.
+        if (quote.status !== 'sent') {
+          Alert.alert(
+            'Mark as sent?',
+            'Did you send this quote to the customer?',
+            [
+              { text: 'Not yet', style: 'cancel' },
+              {
+                text: 'Mark as sent',
+                onPress: () => {
+                  updateQuoteFields({ status: 'sent' });
+                  void flush();
+                },
+              },
+            ]
+          );
+        }
+      } catch (err) {
+        captureException(err, { action: 'share-pdf', quoteId: quote.id });
+        const message =
+          err instanceof Error ? err.message : 'Something went wrong.';
+        Alert.alert(
+          'Could not share PDF',
+          `${message}\n\nQuotes and the catalog stay available offline. PDF share needs the device share sheet; try again when sharing is available.`
+        );
+      } finally {
+        setSharing(false);
+      }
+    },
+    [flush, quote, updateQuoteFields]
+  );
+
   const handleSharePdf = useCallback(async () => {
     if (!quote || sharing) return;
 
     setSharing(true);
+    setLiteratureLoading(true);
     try {
       await flush();
-      const business = await getBusinessSettings();
-      await shareQuotePdf({
-        quote: useQuoteStore.getState().quote ?? quote,
-        items: useQuoteStore.getState().items,
-        business,
-      });
-      // iOS share sheet resolves on dismiss (including cancel), so ask before
-      // flipping status — do not infer that the PDF was actually sent.
-      if (quote.status !== 'sent') {
-        Alert.alert(
-          'Mark as sent?',
-          'Did you send this quote to the customer?',
-          [
-            { text: 'Not yet', style: 'cancel' },
-            {
-              text: 'Mark as sent',
-              onPress: () => {
-                updateQuoteFields({ status: 'sent' });
-                void flush();
-              },
-            },
-          ]
-        );
+      const latestItems = useQuoteStore.getState().items;
+      const options = await listQuoteLiterature(latestItems);
+      if (options.length === 0) {
+        await finishShare([]);
+        return;
       }
-    } catch (err) {
-      captureException(err, { action: 'share-pdf', quoteId: quote.id });
-      const message =
-        err instanceof Error ? err.message : 'Something went wrong.';
-      Alert.alert(
-        'Could not share PDF',
-        `${message}\n\nQuotes and the catalog stay available offline. PDF share needs the device share sheet; try again when sharing is available.`
-      );
-    } finally {
+      setLiteratureOptions(options);
+      setLiteratureSheetOpen(true);
       setSharing(false);
+    } catch (err) {
+      captureException(err, { action: 'list-literature', quoteId: quote.id });
+      // Still allow sharing the quote PDF alone.
+      await finishShare([]);
+    } finally {
+      setLiteratureLoading(false);
     }
-  }, [flush, quote, sharing, updateQuoteFields]);
+  }, [finishShare, flush, quote, sharing]);
 
   const callCustomer = useCallback(() => {
     const phone = quote?.phone.trim();
@@ -709,7 +750,7 @@ export default function QuoteBuilderScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Share PDF quote"
-            disabled={sharing}
+            disabled={sharing || literatureLoading}
             onPress={() => {
               void handleSharePdf();
             }}
@@ -720,7 +761,7 @@ export default function QuoteBuilderScreen() {
               (pressed || sharing) && formStyles.pressed,
             ]}>
             <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
-              {sharing ? 'Preparing…' : 'Share PDF'}
+              {sharing || literatureLoading ? 'Preparing…' : 'Share PDF'}
             </Text>
           </Pressable>
         </View>
@@ -731,6 +772,20 @@ export default function QuoteBuilderScreen() {
         onClose={() => setPickerOpen(false)}
         onSelect={(product) => {
           void handleSelectProduct(product);
+        }}
+      />
+
+      <LiteratureShareSheet
+        visible={literatureSheetOpen}
+        options={literatureOptions}
+        loading={literatureLoading}
+        confirming={sharing}
+        onClose={() => {
+          if (sharing) return;
+          setLiteratureSheetOpen(false);
+        }}
+        onConfirm={(selected) => {
+          void finishShare(selected);
         }}
       />
     </KeyboardForm>

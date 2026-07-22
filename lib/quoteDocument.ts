@@ -47,6 +47,8 @@ export function buildQuoteShareMessage(input: {
   quote: Quote;
   items: QuoteItem[];
   businessName?: string;
+  /** When > 0, message mentions product literature in the attachment. */
+  literatureCount?: number;
 }): string {
   const { quote, items } = input;
   const totals = calcQuoteTotals({
@@ -87,7 +89,16 @@ export function buildQuoteShareMessage(input: {
     lines.push(`Deposit to schedule: ${formatCurrency(depositDue)}.`);
   }
 
-  lines.push('PDF attached — thank you!');
+  const litCount = Math.max(0, Math.floor(Number(input.literatureCount) || 0));
+  if (litCount > 0) {
+    lines.push(
+      litCount === 1
+        ? 'Quote PDF and product literature attached — thank you!'
+        : `Quote PDF and ${litCount} product literature files attached — thank you!`
+    );
+  } else {
+    lines.push('PDF attached — thank you!');
+  }
   return lines.join('\n');
 }
 

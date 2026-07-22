@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 
 import { Text, View, useThemeColor } from '@/components/Themed';
+import LiteratureShareSheet from '@/components/LiteratureShareSheet';
 import { formStyles } from '@/constants/Form';
 import { calcQuoteTotals } from '@/lib/calc';
 import { getBusinessSettings } from '@/lib/db';
@@ -22,6 +23,10 @@ import {
   calcDepositAmount,
   normalizeValidUntil,
 } from '@/lib/quoteDocument';
+import {
+  listQuoteLiterature,
+  type QuoteLiteratureOption,
+} from '@/lib/quoteLiterature';
 import { formatQuoteDate, formatQuoteNumber } from '@/lib/quotes';
 import { useQuoteStore } from '@/store/quoteStore';
 
@@ -55,6 +60,11 @@ export default function QuotePreviewScreen() {
   const updateQuoteFields = useQuoteStore((s) => s.updateQuoteFields);
 
   const [busy, setBusy] = useState<'share' | 'open' | null>(null);
+  const [literatureSheetOpen, setLiteratureSheetOpen] = useState(false);
+  const [literatureOptions, setLiteratureOptions] = useState<
+    QuoteLiteratureOption[]
+  >([]);
+  const [literatureLoading, setLiteratureLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,44 +103,74 @@ export default function QuotePreviewScreen() {
     return buildQuoteShareMessage({ quote, items });
   }, [items, quote]);
 
+  const finishShare = useCallback(
+    async (literature: QuoteLiteratureOption[]) => {
+      if (!quote) return;
+      setBusy('share');
+      try {
+        await flush();
+        const business = await getBusinessSettings();
+        const latest = useQuoteStore.getState();
+        await shareQuotePdf(
+          {
+            quote: latest.quote ?? quote,
+            items: latest.items,
+            business,
+          },
+          { literature }
+        );
+        setLiteratureSheetOpen(false);
+        if (quote.status !== 'sent') {
+          Alert.alert(
+            'Mark as sent?',
+            'Did you send this quote to the customer?',
+            [
+              { text: 'Not yet', style: 'cancel' },
+              {
+                text: 'Mark as sent',
+                onPress: () => {
+                  updateQuoteFields({ status: 'sent' });
+                  void flush();
+                },
+              },
+            ]
+          );
+        }
+      } catch (err) {
+        captureException(err, { action: 'preview-share-pdf', quoteId });
+        Alert.alert(
+          'Could not share PDF',
+          err instanceof Error ? err.message : 'Something went wrong.'
+        );
+      } finally {
+        setBusy(null);
+      }
+    },
+    [flush, quote, quoteId, updateQuoteFields]
+  );
+
   const runShare = useCallback(async () => {
     if (!quote || busy) return;
     setBusy('share');
+    setLiteratureLoading(true);
     try {
       await flush();
-      const business = await getBusinessSettings();
-      const latest = useQuoteStore.getState();
-      await shareQuotePdf({
-        quote: latest.quote ?? quote,
-        items: latest.items,
-        business,
-      });
-      if (quote.status !== 'sent') {
-        Alert.alert(
-          'Mark as sent?',
-          'Did you send this quote to the customer?',
-          [
-            { text: 'Not yet', style: 'cancel' },
-            {
-              text: 'Mark as sent',
-              onPress: () => {
-                updateQuoteFields({ status: 'sent' });
-                void flush();
-              },
-            },
-          ]
-        );
+      const latestItems = useQuoteStore.getState().items;
+      const options = await listQuoteLiterature(latestItems);
+      if (options.length === 0) {
+        await finishShare([]);
+        return;
       }
-    } catch (err) {
-      captureException(err, { action: 'preview-share-pdf', quoteId });
-      Alert.alert(
-        'Could not share PDF',
-        err instanceof Error ? err.message : 'Something went wrong.'
-      );
-    } finally {
+      setLiteratureOptions(options);
+      setLiteratureSheetOpen(true);
       setBusy(null);
+    } catch (err) {
+      captureException(err, { action: 'preview-list-literature', quoteId });
+      await finishShare([]);
+    } finally {
+      setLiteratureLoading(false);
     }
-  }, [busy, flush, quote, quoteId, updateQuoteFields]);
+  }, [busy, finishShare, flush, quote, quoteId]);
 
   const openSystemPreview = useCallback(async () => {
     if (!quote || busy) return;
@@ -295,10 +335,24 @@ export default function QuotePreviewScreen() {
             (pressed || busy) && formStyles.pressed,
           ]}>
           <Text style={formStyles.primaryButtonText} lightColor="#fff" darkColor="#000">
-            {busy === 'share' ? 'Preparing…' : 'Share PDF'}
+            {busy === 'share' || literatureLoading ? 'Preparing…' : 'Share PDF'}
           </Text>
         </Pressable>
       </View>
+
+      <LiteratureShareSheet
+        visible={literatureSheetOpen}
+        options={literatureOptions}
+        loading={literatureLoading}
+        confirming={busy === 'share'}
+        onClose={() => {
+          if (busy === 'share') return;
+          setLiteratureSheetOpen(false);
+        }}
+        onConfirm={(selected) => {
+          void finishShare(selected);
+        }}
+      />
     </View>
   );
 }

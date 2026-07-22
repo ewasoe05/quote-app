@@ -184,9 +184,22 @@ export default function ProductPicker({
                     pressed && styles.rowPressed,
                   ]}>
                   <View style={styles.rowText} lightColor="transparent" darkColor="transparent">
-                    <Text style={styles.rowName} numberOfLines={1}>
-                      {item.name}
-                    </Text>
+                    <View style={styles.rowTitle} lightColor="transparent" darkColor="transparent">
+                      <Text style={styles.rowName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      {(item.attachments?.length ?? 0) > 0 ? (
+                        <View
+                          style={[
+                            styles.litBadge,
+                            { borderColor, backgroundColor: background },
+                          ]}>
+                          <Text style={[styles.litBadgeText, { color: tint }]}>
+                            PDF
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <Text style={styles.rowCategory}>
                       {PRODUCT_CATEGORY_LABELS[item.category]}
                     </Text>
@@ -303,9 +316,26 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  rowTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   rowName: {
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: '600',
+  },
+  litBadge: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  litBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   rowCategory: {
     fontSize: 12,
