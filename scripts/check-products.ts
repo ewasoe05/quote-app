@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 
 import {
   formatCurrency,
+  getPackageDisplayPrice,
   getProductDisplayPrice,
   groupProductsByCategory,
+  marginFromCostSell,
+  normalizePackageComponents,
+  sellFromCostMargin,
 } from '../lib/products';
 import { DEFAULT_CATALOG } from '../lib/seed';
 import type { Product } from '../lib/types';
@@ -17,6 +21,10 @@ function asProduct(
     laborPrice: 0,
     active: true,
     attachments: [],
+    kind: 'standard',
+    components: [],
+    costPrice: 0,
+    marginPercent: 0,
     ...partial,
   };
 }
@@ -43,5 +51,45 @@ assert.equal(groupProductsByCategory([]).length, 0);
 const softener = seeded.find((p) => p.name === 'Clack WS1 48k Softener')!;
 assert.equal(getProductDisplayPrice(softener), 1599);
 assert.equal(formatCurrency(1599), '$1,599.00');
+
+// Cost → margin → sell helper (margin on sell price).
+assert.equal(sellFromCostMargin(100, 50), 200);
+assert.equal(sellFromCostMargin(100, 0), 100);
+assert.equal(marginFromCostSell(100, 200), 50);
+assert.equal(marginFromCostSell(100, 0), 0);
+
+assert.deepEqual(
+  normalizePackageComponents([
+    { productId: 'a', quantity: 1 },
+    { productId: 'a', quantity: 2 },
+    { productId: 'b', quantity: 0 },
+    { productId: '', quantity: 3 },
+  ]),
+  [
+    { productId: 'a', quantity: 3 },
+    { productId: 'b', quantity: 1 },
+  ]
+);
+
+const brine = seeded.find((p) => p.name === 'Brine Tank')!;
+const install = seeded.find((p) => p.name === 'Standard Installation Labor')!;
+const kit = asProduct({
+  id: 'kit-1',
+  name: 'Softener starter kit',
+  category: 'softeners',
+  kind: 'package',
+  components: [
+    { productId: softener.id, quantity: 1 },
+    { productId: brine.id, quantity: 1 },
+    { productId: install.id, quantity: 1 },
+  ],
+});
+assert.equal(
+  getPackageDisplayPrice(kit, seeded),
+  getProductDisplayPrice(softener) +
+    getProductDisplayPrice(brine) +
+    getProductDisplayPrice(install)
+);
+assert.equal(getProductDisplayPrice(kit, seeded), getPackageDisplayPrice(kit, seeded));
 
 console.log('default catalog seed checks passed');

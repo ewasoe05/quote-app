@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text, View, useThemeColor } from '@/components/Themed';
-import { getAllProducts } from '@/lib/db';
+import { getAllProducts, getRecentProductIds } from '@/lib/db';
 import {
   formatCurrency,
   getProductDisplayPrice,
@@ -50,6 +50,7 @@ export default function ProductPicker({
   );
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
@@ -64,8 +65,14 @@ export default function ProductPicker({
 
     (async () => {
       try {
-        const rows = await getAllProducts({ activeOnly: true });
-        if (!cancelled) setProducts(rows);
+        const [rows, recent] = await Promise.all([
+          getAllProducts({ activeOnly: true }),
+          getRecentProductIds(8),
+        ]);
+        if (!cancelled) {
+          setProducts(rows);
+          setRecentIds(recent);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -87,6 +94,64 @@ export default function ProductPicker({
       );
     });
   }, [products, query, category]);
+
+  const recentProducts = useMemo(() => {
+    if (query.trim() || category !== 'all') return [];
+    const byId = new Map(products.map((product) => [product.id, product]));
+    return recentIds
+      .map((id) => byId.get(id))
+      .filter((product): product is Product => Boolean(product));
+  }, [category, products, query, recentIds]);
+
+  const renderProduct = (item: Product) => {
+    const price = getProductDisplayPrice(item, products);
+    const isKit = item.kind === 'package';
+    const hasPdf = (item.attachments?.length ?? 0) > 0;
+    return (
+      <Pressable
+        onPress={() => onSelect(item)}
+        style={({ pressed }) => [
+          styles.row,
+          { backgroundColor: fieldBg },
+          pressed && styles.rowPressed,
+        ]}>
+        <View style={styles.rowText} lightColor="transparent" darkColor="transparent">
+          <View style={styles.rowTitle} lightColor="transparent" darkColor="transparent">
+            <Text style={styles.rowName} numberOfLines={1}>
+              {item.name}
+            </Text>
+            {isKit ? (
+              <View
+                style={[
+                  styles.badge,
+                  { borderColor, backgroundColor: background },
+                ]}>
+                <Text style={[styles.badgeText, { color: tint }]}>Kit</Text>
+              </View>
+            ) : null}
+            {hasPdf ? (
+              <View
+                style={[
+                  styles.badge,
+                  { borderColor, backgroundColor: background },
+                ]}>
+                <Text style={[styles.badgeText, { color: tint }]}>PDF</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.rowCategory}>
+            {PRODUCT_CATEGORY_LABELS[item.category]}
+            {isKit && item.components.length > 0
+              ? ` · ${item.components.length} items`
+              : ''}
+          </Text>
+        </View>
+        <Text style={[styles.rowPrice, { color: textColor }]}>
+          {formatCurrency(price)}
+        </Text>
+      </Pressable>
+    );
+  };
 
   return (
     <Modal
@@ -172,43 +237,23 @@ export default function ProductPicker({
               contentContainerStyle={
                 filtered.length === 0 ? styles.emptyList : styles.list
               }
+              ListHeaderComponent={
+                recentProducts.length > 0 ? (
+                  <View style={styles.recentBlock}>
+                    <Text style={styles.sectionLabel}>Recent</Text>
+                    {recentProducts.map((item) => (
+                      <RNView key={`recent-${item.id}`}>
+                        {renderProduct(item)}
+                      </RNView>
+                    ))}
+                    <Text style={styles.sectionLabel}>All products</Text>
+                  </View>
+                ) : null
+              }
               ListEmptyComponent={
                 <Text style={styles.emptyText}>No matching products</Text>
               }
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => onSelect(item)}
-                  style={({ pressed }) => [
-                    styles.row,
-                    { backgroundColor: fieldBg },
-                    pressed && styles.rowPressed,
-                  ]}>
-                  <View style={styles.rowText} lightColor="transparent" darkColor="transparent">
-                    <View style={styles.rowTitle} lightColor="transparent" darkColor="transparent">
-                      <Text style={styles.rowName} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      {(item.attachments?.length ?? 0) > 0 ? (
-                        <View
-                          style={[
-                            styles.litBadge,
-                            { borderColor, backgroundColor: background },
-                          ]}>
-                          <Text style={[styles.litBadgeText, { color: tint }]}>
-                            PDF
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text style={styles.rowCategory}>
-                      {PRODUCT_CATEGORY_LABELS[item.category]}
-                    </Text>
-                  </View>
-                  <Text style={styles.rowPrice}>
-                    {formatCurrency(getProductDisplayPrice(item))}
-                  </Text>
-                </Pressable>
-              )}
+              renderItem={({ item }) => renderProduct(item)}
             />
           )}
         </View>
@@ -299,6 +344,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.6,
   },
+  recentBlock: {
+    marginBottom: 4,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    opacity: 0.5,
+    marginBottom: 8,
+    marginTop: 4,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -326,13 +383,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  litBadge: {
+  badge: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  litBadgeText: {
+  badgeText: {
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.3,

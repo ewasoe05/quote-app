@@ -10,9 +10,11 @@ import type {
   NewProduct,
   NewQuote,
   NewQuoteItem,
+  PackageComponent,
   Product,
   ProductAttachment,
   ProductCategory,
+  ProductKind,
   Quote,
   QuoteItem,
   QuoteStatus,
@@ -21,6 +23,7 @@ import type {
   UpdateQuoteItem,
 } from './types';
 import { DEFAULT_BUSINESS_SETTINGS } from './types';
+import { normalizePackageComponents } from './products';
 
 const DATABASE_NAME = 'quote-app.db';
 
@@ -39,6 +42,10 @@ type ProductRow = {
   labor_price: number;
   active: number;
   attachments?: string | null;
+  kind?: string | null;
+  components?: string | null;
+  cost_price?: number | null;
+  margin_percent?: number | null;
 };
 
 type QuoteRow = {
@@ -94,6 +101,24 @@ function parseAttachments(raw: string | null | undefined): ProductAttachment[] {
   }
 }
 
+function parseComponents(raw: string | null | undefined): PackageComponent[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return normalizePackageComponents(
+      parsed.filter(
+        (item): item is PackageComponent =>
+          !!item &&
+          typeof item === 'object' &&
+          typeof (item as PackageComponent).productId === 'string'
+      )
+    );
+  } catch {
+    return [];
+  }
+}
+
 function mapProduct(row: ProductRow): Product {
   return {
     id: row.id,
@@ -104,6 +129,10 @@ function mapProduct(row: ProductRow): Product {
     laborPrice: row.labor_price,
     active: row.active === 1,
     attachments: parseAttachments(row.attachments),
+    kind: row.kind === 'package' ? 'package' : 'standard',
+    components: parseComponents(row.components),
+    costPrice: Number(row.cost_price) || 0,
+    marginPercent: Number(row.margin_percent) || 0,
   };
 }
 
@@ -162,7 +191,11 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
       unit_price REAL NOT NULL DEFAULT 0,
       labor_price REAL NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
-      attachments TEXT NOT NULL DEFAULT '[]'
+      attachments TEXT NOT NULL DEFAULT '[]',
+      kind TEXT NOT NULL DEFAULT 'standard',
+      components TEXT NOT NULL DEFAULT '[]',
+      cost_price REAL NOT NULL DEFAULT 0,
+      margin_percent REAL NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS quotes (
@@ -249,6 +282,26 @@ export async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!productColumns.some((column) => column.name === 'attachments')) {
     await db.execAsync(
       `ALTER TABLE products ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'`
+    );
+  }
+  if (!productColumns.some((column) => column.name === 'kind')) {
+    await db.execAsync(
+      `ALTER TABLE products ADD COLUMN kind TEXT NOT NULL DEFAULT 'standard'`
+    );
+  }
+  if (!productColumns.some((column) => column.name === 'components')) {
+    await db.execAsync(
+      `ALTER TABLE products ADD COLUMN components TEXT NOT NULL DEFAULT '[]'`
+    );
+  }
+  if (!productColumns.some((column) => column.name === 'cost_price')) {
+    await db.execAsync(
+      `ALTER TABLE products ADD COLUMN cost_price REAL NOT NULL DEFAULT 0`
+    );
+  }
+  if (!productColumns.some((column) => column.name === 'margin_percent')) {
+    await db.execAsync(
+      `ALTER TABLE products ADD COLUMN margin_percent REAL NOT NULL DEFAULT 0`
     );
   }
 
@@ -442,16 +495,30 @@ export async function seedDefaultCatalog(): Promise<number> {
 
 export async function createProduct(input: NewProduct): Promise<Product> {
   const db = await getDatabase();
+  const kind: ProductKind = input.kind === 'package' ? 'package' : 'standard';
   const product: Product = {
     id: createId(),
-    ...input,
+    name: input.name,
+    category: input.category,
+    description: input.description,
+    unitPrice: input.unitPrice,
+    laborPrice: input.laborPrice,
+    active: input.active,
     attachments: input.attachments ?? [],
+    kind,
+    components:
+      kind === 'package'
+        ? normalizePackageComponents(input.components)
+        : [],
+    costPrice: Math.max(0, Number(input.costPrice) || 0),
+    marginPercent: Math.max(0, Number(input.marginPercent) || 0),
   };
 
   await db.runAsync(
     `INSERT INTO products (
-      id, name, category, description, unit_price, labor_price, active, attachments
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, name, category, description, unit_price, labor_price, active, attachments,
+      kind, components, cost_price, margin_percent
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     product.id,
     product.name,
     product.category,
@@ -459,7 +526,11 @@ export async function createProduct(input: NewProduct): Promise<Product> {
     product.unitPrice,
     product.laborPrice,
     product.active ? 1 : 0,
-    JSON.stringify(product.attachments)
+    JSON.stringify(product.attachments),
+    product.kind,
+    JSON.stringify(product.components),
+    product.costPrice,
+    product.marginPercent
   );
 
   return product;
@@ -495,16 +566,42 @@ export async function updateProduct(
   const existing = await getProductById(id);
   if (!existing) return null;
 
+  const kind: ProductKind =
+    updates.kind !== undefined
+      ? updates.kind === 'package'
+        ? 'package'
+        : 'standard'
+      : existing.kind;
+
   const next: Product = {
     ...existing,
     ...updates,
+    kind,
+    components:
+      kind === 'package'
+        ? normalizePackageComponents(
+            updates.components !== undefined
+              ? updates.components
+              : existing.components
+          )
+        : [],
+    costPrice:
+      updates.costPrice !== undefined
+        ? Math.max(0, Number(updates.costPrice) || 0)
+        : existing.costPrice,
+    marginPercent:
+      updates.marginPercent !== undefined
+        ? Math.max(0, Number(updates.marginPercent) || 0)
+        : existing.marginPercent,
+    attachments: updates.attachments ?? existing.attachments,
   };
 
   const db = await getDatabase();
   await db.runAsync(
     `UPDATE products
      SET name = ?, category = ?, description = ?, unit_price = ?, labor_price = ?,
-         active = ?, attachments = ?
+         active = ?, attachments = ?, kind = ?, components = ?,
+         cost_price = ?, margin_percent = ?
      WHERE id = ?`,
     next.name,
     next.category,
@@ -513,6 +610,10 @@ export async function updateProduct(
     next.laborPrice,
     next.active ? 1 : 0,
     JSON.stringify(next.attachments),
+    next.kind,
+    JSON.stringify(next.components),
+    next.costPrice,
+    next.marginPercent,
     id
   );
 
@@ -526,6 +627,44 @@ export async function deleteProduct(id: string): Promise<boolean> {
     await clearAllProductAttachments(id);
   }
   return result.changes > 0;
+}
+
+const RECENT_PRODUCTS_KEY = 'recent_product_ids';
+const RECENT_PRODUCTS_LIMIT = 12;
+
+/** Remember a product was added to a quote (picker “Recent” section). */
+export async function rememberRecentProduct(productId: string): Promise<void> {
+  if (!productId.trim()) return;
+  const raw = await getSetting(RECENT_PRODUCTS_KEY);
+  let ids: string[] = [];
+  try {
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    if (Array.isArray(parsed)) {
+      ids = parsed.filter((id): id is string => typeof id === 'string');
+    }
+  } catch {
+    ids = [];
+  }
+  const next = [productId, ...ids.filter((id) => id !== productId)].slice(
+    0,
+    RECENT_PRODUCTS_LIMIT
+  );
+  await setSetting(RECENT_PRODUCTS_KEY, JSON.stringify(next));
+}
+
+export async function getRecentProductIds(
+  limit = 8
+): Promise<string[]> {
+  const raw = await getSetting(RECENT_PRODUCTS_KEY);
+  try {
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((id): id is string => typeof id === 'string')
+      .slice(0, Math.max(1, limit));
+  } catch {
+    return [];
+  }
 }
 
 // --- Quotes ---

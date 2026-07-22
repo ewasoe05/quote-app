@@ -46,6 +46,14 @@ export type ProductAttachment = {
   uri: string;
 };
 
+export type ProductKind = 'standard' | 'package';
+
+/** Child product inside a kit/package (expanded when added to a quote). */
+export type PackageComponent = {
+  productId: string;
+  quantity: number;
+};
+
 export interface Product {
   id: string;
   name: string;
@@ -56,10 +64,29 @@ export interface Product {
   active: boolean;
   /** Product pictures and literature as PDF files in app documents. */
   attachments: ProductAttachment[];
+  /** `package` expands into `components` when added to a quote. */
+  kind: ProductKind;
+  components: PackageComponent[];
+  /** Dealer cost for the unit (catalog helper; not shown on quotes). */
+  costPrice: number;
+  /** Target margin % of sell price; drives unitPrice via helper. */
+  marginPercent: number;
 }
 
-export type NewProduct = Omit<Product, 'id' | 'attachments'> & {
+export type NewProduct = Omit<
+  Product,
+  | 'id'
+  | 'attachments'
+  | 'kind'
+  | 'components'
+  | 'costPrice'
+  | 'marginPercent'
+> & {
   attachments?: ProductAttachment[];
+  kind?: ProductKind;
+  components?: PackageComponent[];
+  costPrice?: number;
+  marginPercent?: number;
 };
 export type UpdateProduct = Partial<NewProduct>;
 

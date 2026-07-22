@@ -3,8 +3,10 @@ import { create } from 'zustand';
 import {
   createQuoteItem,
   deleteQuoteItem,
+  getProductById,
   getQuoteById,
   getQuoteItemsByQuoteId,
+  rememberRecentProduct,
   updateQuote,
   updateQuoteItem,
 } from '@/lib/db';
@@ -58,6 +60,42 @@ function clearSaveTimer() {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
+}
+
+async function addOrBumpLine(
+  get: () => QuoteStore,
+  set: (
+    partial:
+      | Partial<QuoteStore>
+      | ((state: QuoteStore) => Partial<QuoteStore>)
+  ) => void,
+  quoteId: string,
+  product: Product,
+  addQty: number
+): Promise<void> {
+  const items = get().items;
+  const existing = items.find((item) => item.productId === product.id);
+  const priceSnapshot = getProductDisplayPrice(product);
+
+  if (existing) {
+    const quantity = existing.quantity + addQty;
+    const updated = await updateQuoteItem(existing.id, { quantity });
+    if (!updated) return;
+    set({
+      items: items.map((item) => (item.id === existing.id ? updated : item)),
+    });
+    return;
+  }
+
+  const created = await createQuoteItem({
+    quoteId,
+    productId: product.id,
+    nameSnapshot: product.name,
+    descriptionSnapshot: product.description?.trim() ?? '',
+    priceSnapshot,
+    quantity: addQty,
+  });
+  set({ items: [...items, created] });
 }
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
@@ -138,36 +176,36 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   },
 
   addProduct: async (product) => {
-    const { quote, items } = get();
+    const { quote } = get();
     if (!quote) return;
 
     await get().flush();
 
-    const priceSnapshot = getProductDisplayPrice(product);
-    const existing = items.find((item) => item.productId === product.id);
+    // Kits expand into child catalog lines (never add the package row itself).
+    if (product.kind === 'package') {
+      const components = product.components ?? [];
+      if (components.length === 0) return;
+
+      set({ saving: true });
+      try {
+        for (const component of components) {
+          const child = await getProductById(component.productId);
+          if (!child || !child.active || child.kind === 'package') continue;
+          const addQty = Math.max(1, Math.floor(Number(component.quantity) || 1));
+          await addOrBumpLine(get, set, quote.id, child, addQty);
+          void rememberRecentProduct(child.id);
+        }
+        void rememberRecentProduct(product.id);
+      } finally {
+        set({ saving: false });
+      }
+      return;
+    }
 
     set({ saving: true });
     try {
-      if (existing) {
-        const quantity = existing.quantity + 1;
-        const updated = await updateQuoteItem(existing.id, { quantity });
-        if (!updated) return;
-        set({
-          items: items.map((item) =>
-            item.id === existing.id ? updated : item
-          ),
-        });
-      } else {
-        const created = await createQuoteItem({
-          quoteId: quote.id,
-          productId: product.id,
-          nameSnapshot: product.name,
-          descriptionSnapshot: product.description?.trim() ?? '',
-          priceSnapshot,
-          quantity: 1,
-        });
-        set({ items: [...items, created] });
-      }
+      await addOrBumpLine(get, set, quote.id, product, 1);
+      void rememberRecentProduct(product.id);
     } finally {
       set({ saving: false });
     }

@@ -92,6 +92,7 @@ export default function ProductsScreen() {
           renderItem={({ item }) => (
             <ProductCard
               product={item}
+              catalog={products}
               onEdit={openEdit}
               onDelete={(product) => {
                 void handleDelete(product);

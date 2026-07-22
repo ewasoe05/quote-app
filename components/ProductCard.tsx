@@ -8,17 +8,19 @@ import type { Product } from '@/lib/types';
 
 type ProductCardProps = {
   product: Product;
+  catalog?: Product[];
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
 };
 
 export default function ProductCard({
   product,
+  catalog,
   onEdit,
   onDelete,
 }: ProductCardProps) {
   const swipeableRef = useRef<Swipeable>(null);
-  const price = getProductDisplayPrice(product);
+  const price = getProductDisplayPrice(product, catalog);
 
   const confirmDelete = () => {
     swipeableRef.current?.close();
@@ -91,9 +93,14 @@ export default function ProductCard({
               numberOfLines={2}>
               {product.name}
             </Text>
-            {!product.active ? (
-              <Text style={styles.inactiveBadge}>Inactive</Text>
-            ) : null}
+            <View style={styles.badgeRow} lightColor="transparent" darkColor="transparent">
+              {product.kind === 'package' ? (
+                <Text style={styles.kitBadge}>Kit</Text>
+              ) : null}
+              {!product.active ? (
+                <Text style={styles.inactiveBadge}>Inactive</Text>
+              ) : null}
+            </View>
           </View>
           <Text style={[styles.price, !product.active && styles.inactiveText]}>
             {formatCurrency(price)}
@@ -128,9 +135,21 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   name: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  kitBadge: {
+    fontSize: 12,
+    fontWeight: '700',
+    opacity: 0.65,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   inactiveBadge: {
     fontSize: 12,
